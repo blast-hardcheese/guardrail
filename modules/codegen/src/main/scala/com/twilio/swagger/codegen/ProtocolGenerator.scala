@@ -104,6 +104,7 @@ object ProtocolGenerator {
       .fold[Type](t"io.circe.Json")(raw =>
         SwaggerUtil.typeName(raw, Option(model.getFormat), ScalaType(model))
       )
+    val valueWrapper = ScalaWrapper(model)
     typeAlias(clsName, tpe)
   }
 

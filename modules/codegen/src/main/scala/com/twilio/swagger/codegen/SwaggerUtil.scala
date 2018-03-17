@@ -6,7 +6,7 @@ import _root_.io.swagger.models.properties._
 import cats.syntax.either._
 import cats.{FlatMap, Foldable}
 import cats.instances.list._
-import com.twilio.swagger.codegen.extract.{Default, ScalaType}
+import com.twilio.swagger.codegen.extract.{Default, ScalaType, ScalaWrapper}
 import com.twilio.swagger.codegen.generators.ScalaParameter
 import java.util.{Map => JMap}
 import scala.language.reflectiveCalls
@@ -15,10 +15,12 @@ import scala.meta._
 object SwaggerUtil {
   sealed trait ResolvedType
   case class Resolved(tpe: Type, classDep: Option[Term.Name], defaultValue: Option[Term]) extends ResolvedType
+  case class WrappedType(tpe: Type, name: Term.Name) extends ResolvedType
   sealed trait LazyResolvedType extends ResolvedType
   case class Deferred(value: String) extends LazyResolvedType
   case class DeferredArray(value: String) extends LazyResolvedType
   case class DeferredMap(value: String) extends LazyResolvedType
+  case class DeferredWrappedType(value: LazyResolvedType, name: Term.Name) extends LazyResolvedType
   object ResolvedType {
     implicit class FoldableExtension[F[_]](F: Foldable[F]) {
       import cats.{Alternative, Monoid}

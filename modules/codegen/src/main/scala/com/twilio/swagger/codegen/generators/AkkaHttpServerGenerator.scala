@@ -159,6 +159,7 @@ object AkkaHttpServerGenerator {
               valueType <- Option(resp.getSchema).map({ prop =>
                 for {
                   meta <- SwaggerUtil.propMeta(prop)
+                  () = println(s"HERE: ${meta}")
                   resolved <- SwaggerUtil.ResolvedType.resolve(meta, protocolElems)
                   SwaggerUtil.Resolved(baseType, _, baseDefaultValue) = resolved
                 } yield baseType
