@@ -152,9 +152,11 @@ object CirceProtocolGenerator {
           dep = rawDep.filterNot(_.value == clsName) // Filter out our own class name
         } yield ProtocolParameter(term, name, dep, readOnlyKey, emptyToNullKey, static)
 
-      case RenderDTOClass(clsName, terms) =>
+      case RenderDTOClass(clsName, terms, body) =>
         Target.pure(q"""
-          case class ${Type.Name(clsName)}(..${terms})
+          case class ${Type.Name(clsName)}(..${terms}) {
+            ..${body}
+          }
         """)
 
       case EncodeModel(clsName, needCamelSnakeConversion, params) =>
