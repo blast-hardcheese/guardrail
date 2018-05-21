@@ -5,7 +5,7 @@ import _root_.io.swagger.models.{ArrayModel, Model, ModelImpl, RefModel}
 import _root_.io.swagger.models.properties._
 import cats.implicits._
 import cats.~>
-import com.twilio.guardrail.extract.{Default, ScalaEmptyIsNull, ScalaType}
+import com.twilio.guardrail.extract.{Default, ScalaEmptyIsNull, ScalaType, ScalaStatic}
 import com.twilio.guardrail.terms.protocol._
 import java.util.Locale
 import scala.collection.JavaConverters._
@@ -115,6 +115,8 @@ object CirceProtocolGenerator {
               None
           }
 
+          static = ScalaStatic(property).getOrElse(false)
+
           readOnlyKey = Option(name).filter(_ => Option(property.getReadOnly).contains(true))
           needsEmptyToNull = property match {
             case d: DateProperty => ScalaEmptyIsNull(d)
@@ -140,14 +142,15 @@ object CirceProtocolGenerator {
             }
 
           (finalDeclType, finalDefaultValue) =
-            Option(property.getRequired)
+            Option(property.getRequired())
+              .map(_ || static)
               .filterNot(_ == false)
               .fold[(Type, Option[Term])](
                 (t"Option[${tpe}]", Some(defaultValue.fold[Term](q"None")(t => q"Option($t)")))
               )(Function.const((tpe, defaultValue)) _)
           term = param"${Term.Name(argName)}: ${finalDeclType}".copy(default=finalDefaultValue)
           dep = rawDep.filterNot(_.value == clsName) // Filter out our own class name
-        } yield ProtocolParameter(term, name, dep, readOnlyKey, emptyToNullKey, false)
+        } yield ProtocolParameter(term, name, dep, readOnlyKey, emptyToNullKey, static)
 
       case RenderDTOClass(clsName, terms) =>
         Target.pure(q"""
