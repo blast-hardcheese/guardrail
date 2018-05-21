@@ -147,7 +147,7 @@ object CirceProtocolGenerator {
               )(Function.const((tpe, defaultValue)) _)
           term = param"${Term.Name(argName)}: ${finalDeclType}".copy(default=finalDefaultValue)
           dep = rawDep.filterNot(_.value == clsName) // Filter out our own class name
-        } yield ProtocolParameter(term, name, dep, readOnlyKey, emptyToNullKey)
+        } yield ProtocolParameter(term, name, dep, readOnlyKey, emptyToNullKey, false)
 
       case RenderDTOClass(clsName, terms) =>
         Target.pure(q"""

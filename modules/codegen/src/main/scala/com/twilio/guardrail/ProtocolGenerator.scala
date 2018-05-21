@@ -17,7 +17,7 @@ import scala.meta._
 
 case class ProtocolDefinitions(elems: List[StrictProtocolElems], protocolImports: List[Import], packageObjectImports: List[Import], packageObjectContents: List[Stat])
 
-case class ProtocolParameter(term: Term.Param, name: String, dep: Option[Term.Name], readOnlyKey: Option[String], emptyToNullKey: Option[String])
+case class ProtocolParameter(term: Term.Param, name: String, dep: Option[Term.Name], readOnlyKey: Option[String], emptyToNullKey: Option[String], static: Boolean)
 
 object ProtocolGenerator {
   private[this] def fromEnum[F[_]](clsName: String, swagger: ModelImpl)(implicit E: EnumProtocolTerms[F]): Free[F, Either[String, ProtocolElems]] = {
@@ -85,11 +85,12 @@ object ProtocolGenerator {
       val needCamelSnakeConversion = props.forall({ case (k, v) => couldBeSnakeCase(k) })
       for {
         params <- props.traverse(transformProperty(clsName, needCamelSnakeConversion, concreteTypes) _ tupled)
-        terms = params.map(_.term).to[List]
-        defn <- renderDTOClass(clsName, terms)
+        (static, variable) = params.partition(_.static)
+        terms = variable.map(_.term).to[List]
+        defn <- renderDTOClass(clsName, terms, List.empty)
         deps = params.flatMap(_.dep)
         encoder <- encodeModel(clsName, needCamelSnakeConversion, params)
-        decoder <- decodeModel(clsName, needCamelSnakeConversion, params)
+        decoder <- decodeModel(clsName, needCamelSnakeConversion, variable)
         cmp <- renderDTOCompanion(clsName, List.empty, encoder, decoder)
       } yield ClassDefinition(clsName, Type.Name(clsName), SwaggerUtil.escapeTree(defn), SwaggerUtil.escapeTree(cmp))
     }
