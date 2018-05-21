@@ -15,6 +15,8 @@ class ModelProtocolTerms[F[_]](implicit I: InjectK[ModelProtocolTerm, F]) {
     Free.inject[ModelProtocolTerm, F](TransformProperty(clsName, name, prop, needCamelSnakeConversion, concreteTypes))
   def renderDTOClass(clsName: String, terms: List[Term.Param], body: List[Stat]): Free[F, Defn.Class] =
     Free.inject[ModelProtocolTerm, F](RenderDTOClass(clsName, terms, body))
+  def renderStaticField(field: ProtocolParameter): Free[F, Stat] =
+    Free.inject[ModelProtocolTerm, F](RenderStaticField(field))
   def encodeModel(clsName: String, needCamelSnakeConversion: Boolean, params: List[ProtocolParameter]): Free[F, Stat] =
     Free.inject[ModelProtocolTerm, F](EncodeModel(clsName, needCamelSnakeConversion, params))
   def decodeModel(clsName: String, needCamelSnakeConversion: Boolean, params: List[ProtocolParameter]): Free[F, Stat] =

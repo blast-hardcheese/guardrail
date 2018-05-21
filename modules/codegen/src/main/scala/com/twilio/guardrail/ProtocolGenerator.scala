@@ -87,7 +87,8 @@ object ProtocolGenerator {
         params <- props.traverse(transformProperty(clsName, needCamelSnakeConversion, concreteTypes) _ tupled)
         (static, variable) = params.partition(_.static)
         terms = variable.map(_.term).to[List]
-        defn <- renderDTOClass(clsName, terms, List.empty)
+        body <- static.traverse(renderStaticField)
+        defn <- renderDTOClass(clsName, terms, body)
         deps = params.flatMap(_.dep)
         encoder <- encodeModel(clsName, needCamelSnakeConversion, params)
         decoder <- decodeModel(clsName, needCamelSnakeConversion, variable)

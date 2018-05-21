@@ -152,6 +152,18 @@ object CirceProtocolGenerator {
           dep = rawDep.filterNot(_.value == clsName) // Filter out our own class name
         } yield ProtocolParameter(term, name, dep, readOnlyKey, emptyToNullKey, static)
 
+      case RenderStaticField(param) =>
+        for {
+          _ <- Target.log.debug("definitions", "circe", "modelProtocolTerm")(s"Attempting to render ${param.term}")
+          res <- param.term match {
+            case param"${name}: ${Some(tpe)} = ${Some(default)}" =>
+              Target.pure(q"""
+                val ${Pat.Var(Term.Name(name.value))}: ${tpe} = ${default}
+              """)
+            case err => Target.error(s"Unexpected structure, please report this! ${err}")
+          }
+        } yield res
+
       case RenderDTOClass(clsName, terms, body) =>
         Target.pure(q"""
           case class ${Type.Name(clsName)}(..${terms}) {
