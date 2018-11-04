@@ -7,28 +7,31 @@ import cats.arrow.FunctionK
 import Http4sClientGenerator._
 import Http4sServerGenerator._
 import Http4sGenerator._
-import CirceProtocolGenerator._
 import ScalaGenerator._
 import SwaggerGenerator._
 
-object Http4s extends FunctionK[CodegenApplication, Target] {
-  val interpDefinitionPM: DefinitionPM ~> Target         = ProtocolSupportTermInterp or ModelProtocolTermInterp
-  val interpDefinitionPME: DefinitionPME ~> Target       = EnumProtocolTermInterp or interpDefinitionPM
-  val interpDefinitionPMEA: DefinitionPMEA ~> Target     = AliasProtocolTermInterp or interpDefinitionPME
-  val interpDefinitionPMEAA: DefinitionPMEAA ~> Target   = ArrayProtocolTermInterp or interpDefinitionPMEA
-  val interpDefinitionPMEAAP: DefinitionPMEAAP ~> Target = PolyProtocolTermInterp or interpDefinitionPMEAA
+class Http4s(val A: languages.Algebras[languages.ScalaLanguage]) {
+  val circeProtocolGenerator = new CirceProtocolGenerator(A)
 
-  val interpModel: ModelInterpreters ~> Target = interpDefinitionPMEAAP
+  import circeProtocolGenerator._
 
-  val interpFrameworkC: FrameworkC ~> Target     = ClientTermInterp or interpModel
-  val interpFrameworkCS: FrameworkCS ~> Target   = ServerTermInterp or interpFrameworkC
-  val interpFrameworkCSF: FrameworkCSF ~> Target = FrameworkInterp or interpFrameworkCS
+  val interpDefinitionPM: A.DefinitionPM ~> Target         = ProtocolSupportTermInterp or ModelProtocolTermInterp
+  val interpDefinitionPME: A.DefinitionPME ~> Target       = EnumProtocolTermInterp or interpDefinitionPM
+  val interpDefinitionPMEA: A.DefinitionPMEA ~> Target     = AliasProtocolTermInterp or interpDefinitionPME
+  val interpDefinitionPMEAA: A.DefinitionPMEAA ~> Target   = ArrayProtocolTermInterp or interpDefinitionPMEA
+  val interpDefinitionPMEAAP: A.DefinitionPMEAAP ~> Target = PolyProtocolTermInterp or interpDefinitionPMEAA
 
-  val interpFramework: ClientServerTerms ~> Target = interpFrameworkCSF
+  val interpModel: A.ModelInterpreters ~> Target = interpDefinitionPMEAAP
 
-  val parser: Parser ~> Target = SwaggerInterp or interpFramework
+  val interpFrameworkC: A.FrameworkC ~> Target     = ClientTermInterp or interpModel
+  val interpFrameworkCS: A.FrameworkCS ~> Target   = ServerTermInterp or interpFrameworkC
+  val interpFrameworkCSF: A.FrameworkCSF ~> Target = FrameworkInterp or interpFrameworkCS
 
-  val codegenApplication: CodegenApplication ~> Target = ScalaInterp or parser
+  val interpFramework: A.ClientServerTerms ~> Target = interpFrameworkCSF
 
-  def apply[T](x: CodegenApplication[T]): Target[T] = codegenApplication.apply(x)
+  val parser: A.Parser ~> Target = SwaggerInterp or interpFramework
+
+  val codegenApplication: A.CodegenApplication ~> Target = ScalaInterp or parser
+
+  def interp: FunctionK[A.CodegenApplication, Target] = codegenApplication
 }

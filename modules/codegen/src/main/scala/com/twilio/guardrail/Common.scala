@@ -8,27 +8,34 @@ import cats.syntax.either._
 import cats.syntax.semigroup._
 import cats.syntax.traverse._
 import cats.~>
-import com.twilio.guardrail.terms.{ CoreTerm, CoreTerms, ScalaTerms, SwaggerTerms }
-import com.twilio.guardrail.terms.framework.FrameworkTerms
 import com.twilio.guardrail.generators.GeneratorSettings
-import java.nio.file.{ Path, Paths }
+import com.twilio.guardrail.languages
 import com.twilio.guardrail.protocol.terms.protocol.PolyProtocolTerms
-
+import com.twilio.guardrail.terms.CoreTermAlgebra
+import com.twilio.guardrail.terms.framework.FrameworkTerms
+import com.twilio.guardrail.terms.{ ScalaTerms, SwaggerTerms }
+import java.nio.file.{ Path, Paths }
 import scala.collection.JavaConverters._
 import scala.io.AnsiColor
 import scala.meta._
 
-object Common {
-  def writePackage(kind: CodegenTarget,
-                   context: Context,
-                   swagger: Swagger,
-                   outputPath: Path,
-                   pkgName: List[String],
-                   dtoPackage: List[String],
-                   customImports: List[Import])(implicit F: FrameworkTerms[CodegenApplication],
-                                                Sc: ScalaTerms[CodegenApplication],
-                                                Pol: PolyProtocolTerms[CodegenApplication],
-                                                Sw: SwaggerTerms[CodegenApplication]): Free[CodegenApplication, List[WriteTree]] = {
+class Common[Language <: languages.LanguageAbstraction](val A: languages.Algebras[Language]) {
+  import A._
+
+  val protocolGenerator = new ProtocolGenerator[languages.ScalaLanguage](A)
+
+  def writePackage(
+      kind: CodegenTarget,
+      context: Context,
+      swagger: Swagger,
+      outputPath: Path,
+      pkgName: List[String],
+      dtoPackage: List[String],
+      customImports: List[Import]
+  )(implicit F: FrameworkTerms[protocolGenerator.A.CodegenApplication],
+    Sc: ScalaTerms[protocolGenerator.A.CodegenApplication],
+    Pol: PolyProtocolTerms[protocolGenerator.A.CodegenApplication],
+    Sw: SwaggerTerms[protocolGenerator.A.CodegenApplication]): Free[protocolGenerator.A.CodegenApplication, List[WriteTree]] = {
     import F._
     import Sc._
     import Sw._
@@ -50,7 +57,7 @@ object Common {
       _.map(Term.Name.apply _).reduceLeft(Term.Select.apply _)
 
     for {
-      proto <- ProtocolGenerator.fromSwagger[CodegenApplication](swagger)
+      proto <- protocolGenerator.fromSwagger[protocolGenerator.A.CodegenApplication](swagger)
       ProtocolDefinitions(protocolElems, protocolImports, packageObjectImports, packageObjectContents) = proto
       implicitsImport                                                                                  = q"import ${buildPkgTerm(List("_root_") ++ pkgName ++ List("Implicits"))}._"
       imports                                                                                          = customImports ++ protocolImports ++ List(implicitsImport)
@@ -146,14 +153,14 @@ object Common {
         case CodegenTarget.Client =>
           for {
             clientMeta <- ClientGenerator
-              .fromSwagger[CodegenApplication](context, frameworkImports)(schemes, host, basePath, groupedRoutes)(protocolElems)
+              .fromSwagger[protocolGenerator.A.CodegenApplication](context, frameworkImports)(schemes, host, basePath, groupedRoutes)(protocolElems)
             Clients(clients) = clientMeta
           } yield CodegenDefinitions(clients, List.empty)
 
         case CodegenTarget.Server =>
           for {
             serverMeta <- ServerGenerator
-              .fromSwagger[CodegenApplication](context, swagger, frameworkImports)(protocolElems)
+              .fromSwagger[protocolGenerator.A.CodegenApplication](context, swagger, frameworkImports)(protocolElems)
             Servers(servers) = serverMeta
           } yield CodegenDefinitions(List.empty, servers)
       }

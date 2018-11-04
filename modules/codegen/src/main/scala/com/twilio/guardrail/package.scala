@@ -70,24 +70,6 @@ package guardrail {
 }
 
 package object guardrail {
-  type DefinitionPM[T]     = EitherK[ProtocolSupportTerm, ModelProtocolTerm, T]
-  type DefinitionPME[T]    = EitherK[EnumProtocolTerm, DefinitionPM, T]
-  type DefinitionPMEA[T]   = EitherK[AliasProtocolTerm, DefinitionPME, T]
-  type DefinitionPMEAA[T]  = EitherK[ArrayProtocolTerm, DefinitionPMEA, T]
-  type DefinitionPMEAAP[T] = EitherK[PolyProtocolTerm, DefinitionPMEAA, T]
-
-  type ModelInterpreters[T] = DefinitionPMEAAP[T]
-
-  type FrameworkC[T]   = EitherK[ClientTerm, ModelInterpreters, T]
-  type FrameworkCS[T]  = EitherK[ServerTerm, FrameworkC, T]
-  type FrameworkCSF[T] = EitherK[FrameworkTerm, FrameworkCS, T]
-
-  type ClientServerTerms[T] = FrameworkCSF[T]
-
-  type Parser[T] = EitherK[SwaggerTerm, ClientServerTerms, T]
-
-  type CodegenApplication[T] = EitherK[ScalaTerm, Parser, T]
-
   type Logger[T]     = WriterT[Id, StructuredLogger, T]
   type Settings[T]   = ReaderT[Logger, GeneratorSettings, T]
   type Target[A]     = EitherT[Settings, String, A]

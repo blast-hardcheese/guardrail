@@ -10,6 +10,7 @@ import com.twilio.guardrail.terms._
 import scala.collection.JavaConverters._
 import scala.meta._
 
+/*
 object SwaggerGenerator {
   object SwaggerInterp extends (SwaggerTerm ~> Target) {
     def splitOperationParts(operationId: String): (List[String], String) = {
@@ -55,3 +56,4 @@ object SwaggerGenerator {
     }
   }
 }
+ */

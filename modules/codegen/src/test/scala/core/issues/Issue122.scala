@@ -9,7 +9,6 @@ import com.twilio.guardrail.{
   Client,
   ClientGenerator,
   Clients,
-  CodegenApplication,
   Context,
   ProtocolDefinitions,
   ProtocolGenerator,

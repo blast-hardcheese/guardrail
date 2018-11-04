@@ -6,6 +6,7 @@ import cats.~>
 import com.twilio.guardrail.terms._
 import scala.meta._
 
+/*
 object ScalaGenerator {
   object ScalaInterp extends (ScalaTerm ~> Target) {
     def apply[T](term: ScalaTerm[T]): Target[T] = term match {
@@ -110,3 +111,4 @@ object ScalaGenerator {
     }
   }
 }
+ */

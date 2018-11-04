@@ -33,7 +33,9 @@ case class SuperClass(
     discriminators: List[String]
 )
 
-object ProtocolGenerator {
+class ProtocolGenerator[Language <: languages.LanguageAbstraction](val A: languages.Algebras[Language]) {
+  import A.protocolSupportAlgebra.ProtocolSupportTerms
+
   private[this] def fromEnum[F[_]](clsName: String, swagger: ModelImpl)(implicit E: EnumProtocolTerms[F],
                                                                         F: FrameworkTerms[F]): Free[F, Either[String, ProtocolElems]] = {
     import E._
@@ -103,7 +105,7 @@ object ProtocolGenerator {
     */
   private[this] def fromPoly[F[_]](
       hierarchy: ClassParent,
-      concreteTypes: List[PropMeta],
+      concreteTypes: List[PropMeta[languages.ScalaLanguage]],
       definitions: List[(String, Model)]
   )(implicit F: FrameworkTerms[F], P: PolyProtocolTerms[F], M: ModelProtocolTerms[F]): Free[F, ProtocolElems] = {
     import P._
@@ -139,7 +141,7 @@ object ProtocolGenerator {
     }
   }
 
-  def extractParents[F[_]](elem: Model, definitions: List[(String, Model)], concreteTypes: List[PropMeta])(
+  def extractParents[F[_]](elem: Model, definitions: List[(String, Model)], concreteTypes: List[PropMeta[languages.ScalaLanguage]])(
       implicit M: ModelProtocolTerms[F],
       F: FrameworkTerms[F],
       P: PolyProtocolTerms[F]
@@ -181,7 +183,7 @@ object ProtocolGenerator {
     } yield supper
   }
 
-  private[this] def fromModel[F[_]](clsName: String, model: Model, parents: List[SuperClass], concreteTypes: List[PropMeta])(
+  private[this] def fromModel[F[_]](clsName: String, model: Model, parents: List[SuperClass], concreteTypes: List[PropMeta[languages.ScalaLanguage]])(
       implicit M: ModelProtocolTerms[F],
       F: FrameworkTerms[F]
   ): Free[F, Either[String, ProtocolElems]] = {
@@ -239,8 +241,10 @@ object ProtocolGenerator {
     Free.pure(RandomType(clsName, tpe))
   }
 
-  def fromArray[F[_]](clsName: String, arr: ArrayModel, concreteTypes: List[PropMeta])(implicit R: ArrayProtocolTerms[F],
-                                                                                       A: AliasProtocolTerms[F]): Free[F, ProtocolElems] = {
+  def fromArray[F[_]](clsName: String, arr: ArrayModel, concreteTypes: List[PropMeta[languages.ScalaLanguage]])(
+      implicit R: ArrayProtocolTerms[F],
+      A: AliasProtocolTerms[F]
+  ): Free[F, ProtocolElems] = {
     import R._
     for {
       tpe <- extractArrayType(arr, concreteTypes)

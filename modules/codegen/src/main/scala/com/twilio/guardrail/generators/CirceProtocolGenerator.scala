@@ -6,7 +6,7 @@ import _root_.io.swagger.models.properties._
 import cats.implicits._
 import cats.~>
 import com.twilio.guardrail.extract.{ Default, ScalaEmptyIsNull, ScalaType }
-import com.twilio.guardrail.terms
+import com.twilio.guardrail.languages.ScalaLanguage
 import java.util.Locale
 
 import com.twilio.guardrail.protocol.terms.protocol._
@@ -14,12 +14,15 @@ import com.twilio.guardrail.protocol.terms.protocol._
 import scala.collection.JavaConverters._
 import scala.meta._
 
-object CirceProtocolGenerator {
+/*
+class CirceProtocolGenerator(val A: languages.Algebras[ScalaLanguage]) {
+
+  import A.protocolSupportAlgebra._
   import ProtocolGenerator._
 
   def suffixClsName(prefix: String, clsName: String) = Pat.Var(Term.Name(s"${prefix}${clsName}"))
 
-  def lookupTypeName(tpeName: String, concreteTypes: List[PropMeta])(f: Type => Type): Option[Type] =
+  def lookupTypeName(tpeName: String, concreteTypes: List[PropMeta[languages.ScalaLanguage]])(f: Type => Type): Option[Type] =
     concreteTypes
       .find(_.clsName == tpeName)
       .map(_.tpe)
@@ -343,7 +346,7 @@ object CirceProtocolGenerator {
           } yield
             result.map {
               case (clsName, SwaggerUtil.Resolved(tpe, _, _)) =>
-                PropMeta(clsName, tpe)
+                PropMeta[languages.ScalaLanguage](clsName, tpe)
             }
         }
 
@@ -466,3 +469,4 @@ object CirceProtocolGenerator {
     }
   }
 }
+ */

@@ -7,13 +7,16 @@ import cats.syntax.show._
 import cats.syntax.traverse._
 import cats.~>
 import com.twilio.guardrail.core.CoreTermInterp
-import com.twilio.guardrail.terms.CoreTerm
 import com.twilio.swagger.core.{ LogLevel, LogLevels }
 import com.twilio.guardrail.generators.GeneratorSettings
 
 import scala.io.AnsiColor
 
 object CLICommon {
+  implicit val language = new languages.ScalaLanguage
+  val algebra           = new languages.Algebras(language)
+  import algebra._
+
   def run(args: Array[String])(interpreter: CoreTerm ~> CoreTarget): Unit = {
     // Hacky loglevel parsing, only supports levels that come before absolutely
     // every other argument due to arguments being a small configuration
@@ -23,8 +26,9 @@ object CLICommon {
     val level: Option[String] = levels.lastOption.map(_.stripPrefix("--"))
 
     val fallback = List.empty[(GeneratorSettings, ReadSwagger[Target[List[WriteTree]]])]
-    val result = Common
-      .runM[CoreTerm](newArgs)
+
+    val result = new Common(algebra)
+      .runM[CoreTerm](newArgs)(algebra.coreTerm)
       .foldMap(interpreter)
       .fold[List[(GeneratorSettings, ReadSwagger[Target[List[WriteTree]]])]](
         {

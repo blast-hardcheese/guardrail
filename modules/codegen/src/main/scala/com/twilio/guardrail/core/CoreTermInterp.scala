@@ -20,11 +20,12 @@ object CoreTermInterp extends (CoreTerm ~> CoreTarget) {
         .pure("akka-http")
 
     case ExtractGenerator(context) =>
+      val A: languages.Algebras[languages.ScalaLanguage] = ???
       for {
         _ <- CoreTarget.log.debug("core", "extractGenerator")("Looking up framework")
-        framework <- context.framework.fold(CoreTarget.error[cats.arrow.FunctionK[CodegenApplication, Target]](NoFramework))({
-          case "akka-http" => CoreTarget.pure(AkkaHttp)
-          case "http4s"    => CoreTarget.pure(Http4s)
+        framework <- context.framework.fold(CoreTarget.error[cats.arrow.FunctionK[A.CodegenApplication, Target]](NoFramework))({
+          case "akka-http" => CoreTarget.pure(new AkkaHttp(A).interp)
+          case "http4s"    => CoreTarget.pure(new Http4s(A).interp)
           case unknown     => CoreTarget.error(UnknownFramework(unknown))
         })
         _ <- CoreTarget.log.debug("core", "extractGenerator")(s"Found: $framework")
