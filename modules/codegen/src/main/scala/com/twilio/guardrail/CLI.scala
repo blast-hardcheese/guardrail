@@ -7,7 +7,7 @@ import cats.~>
 import com.twilio.guardrail.core.CoreTermInterp
 import com.twilio.guardrail.terms.CoreTerm
 import com.twilio.swagger.core.{ LogLevel, LogLevels }
-import com.twilio.guardrail.languages.{ LA, ScalaLanguage }
+import com.twilio.guardrail.languages.{ BashLanguage, LA, ScalaLanguage }
 
 import scala.io.AnsiColor
 
@@ -122,9 +122,11 @@ object CLICommon {
 }
 
 trait CLICommon {
+  val bashInterpreter: CoreTerm[BashLanguage, ?] ~> CoreTarget
   val scalaInterpreter: CoreTerm[ScalaLanguage, ?] ~> CoreTarget
 
   val handleLanguage: PartialFunction[String, Array[String] => Unit] = {
+    case "bash"  => CLICommon.run(_)(bashInterpreter)
     case "scala" => CLICommon.run(_)(scalaInterpreter)
   }
 
@@ -137,6 +139,9 @@ trait CLICommon {
 object CLI extends CLICommon {
   import com.twilio.guardrail.generators.{ AkkaHttp, Http4s }
   import scala.meta._
+  val bashInterpreter = CoreTermInterp[BashLanguage]("curl", {
+    case _ if false => ???
+  }, Either.right)
   val scalaInterpreter = CoreTermInterp[ScalaLanguage](
     "akka-http", {
       case "akka-http" => AkkaHttp

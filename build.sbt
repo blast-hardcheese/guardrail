@@ -23,7 +23,19 @@ val scalatestVersion  = "3.0.5"
 
 mainClass in assembly := Some("com.twilio.guardrail.CLI")
 
-lazy val runScalaExample: TaskKey[Unit] = taskKey[Unit]("Run scala generator with example args")
+lazy val runBashExample: TaskKey[Unit] = taskKey[Unit]("Run with example args")
+fullRunTask(
+  runBashExample,
+  Test,
+  "com.twilio.guardrail.CLI",
+  """
+  bash
+  --defaults --import support.PositiveLong
+  --client --specPath modules/sample/src/main/resources/polymorphism.yaml --outputPath modules/sample/src/main/scala --packageName issues.issue43.client.http4s
+""".replaceAllLiterally("\n", " ").split(' ').filter(_.nonEmpty): _*
+)
+
+lazy val runScalaExample: TaskKey[Unit] = taskKey[Unit]("Run with example args")
 fullRunTask(
   runScalaExample,
   Test,
@@ -93,6 +105,7 @@ resetSample := {
 }
 
 addCommandAlias("example", "; resetSample ; runScalaExample ; sample/test")
+addCommandAlias("bashTestSuite", "; codegen/test ; resetSample; runBashExample ; sample/test")
 addCommandAlias("scalaTestSuite", "; codegen/test ; resetSample; runScalaExample ; sample/test")
 addCommandAlias("testSuite", "; scalaTestSuite")
 
