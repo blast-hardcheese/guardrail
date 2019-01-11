@@ -14,7 +14,8 @@ scalaVersion in ThisBuild := crossScalaVersions.value.last
 scalafmtOnCompile in ThisBuild := true
 scalafmtFailTest in ThisBuild := false
 
-val akkaVersion       = "10.0.14"
+val akkaHttpVersion   = "10.1.7"
+val akkaStreamVersion = "2.5.19"
 val catsVersion       = "1.4.0"
 val catsEffectVersion = "1.0.0"
 val circeVersion      = "0.10.1"
@@ -211,8 +212,10 @@ lazy val sample = (project in file("modules/sample"))
       |import scala.meta._
       |""".stripMargin,
     libraryDependencies ++= Seq(
-      "com.typesafe.akka" %% "akka-http"           % akkaVersion,
-      "com.typesafe.akka" %% "akka-http-testkit"   % akkaVersion,
+      "com.typesafe.akka" %% "akka-http"           % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-http-testkit"   % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-stream"         % akkaStreamVersion,
+      "com.typesafe.akka" %% "akka-stream-testkit" % akkaStreamVersion,
       "io.circe"          %% "circe-core"          % circeVersion,
       "io.circe"          %% "circe-generic"       % circeVersion,
       "io.circe"          %% "circe-java8"         % circeVersion,
