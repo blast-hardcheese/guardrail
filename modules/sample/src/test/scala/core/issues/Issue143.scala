@@ -42,48 +42,10 @@ class Issue143 extends FunSuite with Matchers with EitherValues with ScalaFuture
         )
       ).toEntity.withSizeLimit(1001))
 
-    val response = Route.asyncHandler(route).apply(req).futureValue
-    response.status should equal(StatusCodes.RequestEntityTooLarge)
-    tempDest.exists() should equal(false)
-  }
-
-  test("Ensure that failed uploads are cleaned up afterwards (bogus)") {
-    val tempDest = File.createTempFile("guardrail.", ".dat")
-    val route = Resource.routes(new Handler {
-      def uploadFile(respond: Resource.uploadFileResponse.type)(file: (File, Option[String], akka.http.scaladsl.model.ContentType)): Future[Resource.uploadFileResponse] =
-        Future.successful(respond.Created)
-      def uploadFileMapFileField(fieldName: String,fileName: Option[String],contentType: akka.http.scaladsl.model.ContentType): java.io.File =
-        tempDest
-    })
-
-    val chunks = 1000
-    val data = "foo"
-    val contentLength = chunks * data.length
-    val req = Post("/file").withEntity(Multipart.FormData(
-        Multipart.FormData.BodyPart("file",
-          HttpEntity(
-            ContentTypes.`text/plain(UTF-8)`,
-            contentLength,
-            Source.fromIterator(() => List.fill(chunks)(akka.util.ByteString.fromString(data)).toIterator)
-          )
-        )
-      ).toEntity.withSizeLimit(1001))
-
-    println(s"first bogus: ${tempDest.exists()}")
-    val first: RouteTestResult = req ~> route
-    println(s"second bogus: ${tempDest.exists()}")
-    def third: RouteTestResult => org.scalatest.Assertion = check {
-      println(s"fourth bogus: ${tempDest.exists()}")
+    req ~> route ~> check {
       status should equal(StatusCodes.RequestEntityTooLarge)
     }
-    println(s"third bogus: ${tempDest.exists()}")
-    first ~> third
-    println(s"fifth bogus: ${tempDest.exists()}")
 
-    scala.concurrent.blocking {
-      Thread.sleep(2000)
-      println(tempDest.exists())
-      tempDest.exists() should equal(false) // bogus
-    }
+    tempDest.exists() should equal(false)
   }
 }
