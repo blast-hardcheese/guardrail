@@ -42,7 +42,7 @@ class Issue143 extends FunSuite with Matchers with EitherValues with ScalaFuture
 
     req ~> route ~> check {
       status should equal(StatusCodes.RequestEntityTooLarge)
-      tempDest.exists() should equal(false)
     }
+    tempDest.exists() should equal(false)
   }
 }
