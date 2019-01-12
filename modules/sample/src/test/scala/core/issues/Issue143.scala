@@ -48,8 +48,6 @@ class Issue143 extends FunSuite with Matchers with EitherValues with ScalaFuture
   }
 
   test("Ensure that failed uploads are cleaned up afterwards (bogus)") {
-    println(system.dispatcher)
-    println(implicitly[scala.concurrent.ExecutionContext])
     val tempDest = File.createTempFile("guardrail.", ".dat")
     val route = Resource.routes(new Handler {
       def uploadFile(respond: Resource.uploadFileResponse.type)(file: (File, Option[String], akka.http.scaladsl.model.ContentType)): Future[Resource.uploadFileResponse] =
@@ -71,10 +69,17 @@ class Issue143 extends FunSuite with Matchers with EitherValues with ScalaFuture
         )
       ).toEntity.withSizeLimit(1001))
 
-    req ~> route ~> check {
+    println(s"first bogus: ${tempDest.exists()}")
+    val first: RouteTestResult = req ~> route
+    println(s"second bogus: ${tempDest.exists()}")
+    def third: RouteTestResult => org.scalatest.Assertion = check {
+      println(s"fourth bogus: ${tempDest.exists()}")
       status should equal(StatusCodes.RequestEntityTooLarge)
-      println(tempDest.exists())
     }
+    println(s"third bogus: ${tempDest.exists()}")
+    first ~> third
+    println(s"fifth bogus: ${tempDest.exists()}")
+
     scala.concurrent.blocking {
       Thread.sleep(2000)
       println(tempDest.exists())
