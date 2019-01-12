@@ -73,10 +73,11 @@ class Issue143 extends FunSuite with Matchers with EitherValues with ScalaFuture
 
     req ~> route ~> check {
       status should equal(StatusCodes.RequestEntityTooLarge)
-      tempDest.exists() should equal(true) // bogus
+      println(tempDest.exists())
     }
     scala.concurrent.blocking {
       Thread.sleep(2000)
+      println(tempDest.exists())
       tempDest.exists() should equal(false) // bogus
     }
   }
