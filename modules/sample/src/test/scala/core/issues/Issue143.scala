@@ -13,6 +13,8 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class Issue143 extends FunSuite with Matchers with EitherValues with ScalaFutures with ScalatestRouteTest {
+  override implicit val patienceConfig = PatienceConfig(10.seconds, 1.second)
+
   override def testConfigSource =
     s"""
       |akka.loglevel = OFF
@@ -40,12 +42,42 @@ class Issue143 extends FunSuite with Matchers with EitherValues with ScalaFuture
         )
       ).toEntity.withSizeLimit(1001))
 
+    val response = Route.asyncHandler(route).apply(req).futureValue
+    response.status should equal(StatusCodes.RequestEntityTooLarge)
+    tempDest.exists() should equal(false)
+  }
+
+  test("Ensure that failed uploads are cleaned up afterwards (bogus)") {
+    println(system.dispatcher)
+    println(implicitly[scala.concurrent.ExecutionContext])
+    val tempDest = File.createTempFile("guardrail.", ".dat")
+    val route = Resource.routes(new Handler {
+      def uploadFile(respond: Resource.uploadFileResponse.type)(file: (File, Option[String], akka.http.scaladsl.model.ContentType)): Future[Resource.uploadFileResponse] =
+        Future.successful(respond.Created)
+      def uploadFileMapFileField(fieldName: String,fileName: Option[String],contentType: akka.http.scaladsl.model.ContentType): java.io.File =
+        tempDest
+    })
+
+    val chunks = 1000
+    val data = "foo"
+    val contentLength = chunks * data.length
+    val req = Post("/file").withEntity(Multipart.FormData(
+        Multipart.FormData.BodyPart("file",
+          HttpEntity(
+            ContentTypes.`text/plain(UTF-8)`,
+            contentLength,
+            Source.fromIterator(() => List.fill(chunks)(akka.util.ByteString.fromString(data)).toIterator)
+          )
+        )
+      ).toEntity.withSizeLimit(1001))
+
     req ~> route ~> check {
       status should equal(StatusCodes.RequestEntityTooLarge)
+      tempDest.exists() should equal(true) // bogus
     }
     scala.concurrent.blocking {
       Thread.sleep(2000)
-      tempDest.exists() should equal(false)
+      tempDest.exists() should equal(false) // bogus
     }
   }
 }
