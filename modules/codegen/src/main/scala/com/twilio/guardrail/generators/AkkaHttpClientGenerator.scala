@@ -194,11 +194,11 @@ object AkkaHttpClientGenerator {
             }
           }
 
-          val (tracingExpr, httpClientName) =
+          val (tracingExpr, httpClientName): (Term => Term, Term.Name) =
             if (tracing)
-              (List(q"""val tracingHttpClient = traceBuilder(s"$${clientName}:$${methodName}")(httpClient)"""), q"tracingHttpClient")
+              (op => q"""val tracingHttpClient = traceBuilder(s"$${clientName}:$${methodName}")(httpClient); ${op}""", q"tracingHttpClient")
             else
-              (List.empty, q"httpClient")
+              (identity, q"httpClient")
 
           val headersExpr = List(q"val allHeaders = headers ++ $headerParams")
 
@@ -222,22 +222,23 @@ object AkkaHttpClientGenerator {
 
           val methodBody = q"""
             {
-              ..${tracingExpr};
               ..${headersExpr};
-              makeRequest(
-                HttpMethods.${Term.Name(httpMethod.toString.toUpperCase)},
-                ${urlWithParams},
-                allHeaders,
-                ${entity},
-                HttpProtocols.`HTTP/1.1`
-              ).flatMap(req =>
-                EitherT(${httpClientName}(req).flatMap(resp =>
-                  ${Term.Match(q"resp.status", cases)}
-                ).recover({
-                  case e: Throwable =>
-                    Left(Left(e))
-                }))
-              )
+              ${tracingExpr(q"""
+                makeRequest(
+                  HttpMethods.${Term.Name(httpMethod.toString.toUpperCase)},
+                  ${urlWithParams},
+                  allHeaders,
+                  ${entity},
+                  HttpProtocols.`HTTP/1.1`
+                ).flatMap(req =>
+                  EitherT(${httpClientName}(req).flatMap(resp =>
+                    ${Term.Match(q"resp.status", cases)}
+                  ).recover({
+                    case e: Throwable =>
+                      Left(Left(e))
+                  }))
+                )
+              """)}
             }
             """
 
