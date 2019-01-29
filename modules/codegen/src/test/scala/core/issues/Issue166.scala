@@ -43,6 +43,8 @@ class Issue166 extends FunSuite with Matchers with SwaggerSpecRunner {
   test("Handle generation of models") {
     val opts = new ParseOptions()
     opts.setResolve(true)
+    opts.setResolveFully(true)
+    opts.setResolveCombinators(true)
     val (proto, codegen) = Target.unsafeExtract(
       Common
         .prepareDefinitions[ScalaLanguage, CodegenApplication[ScalaLanguage, ?]](

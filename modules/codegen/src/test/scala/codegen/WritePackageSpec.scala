@@ -19,6 +19,10 @@ import scala.meta._
 import _root_.io.swagger.v3.parser.OpenAPIV3Parser
 
 class WritePackageSpec extends FunSuite with Matchers {
+  val parseOpts = new ParseOptions
+  parseOpts.setResolve(true)
+  parseOpts.setResolveFully(true)
+  parseOpts.setResolveCombinators(true)
   val swagger: OpenAPI = new OpenAPIV3Parser()
     .readContents(
       s"""
@@ -58,7 +62,7 @@ class WritePackageSpec extends FunSuite with Matchers {
     |        type: string
     |""".stripMargin,
       new util.LinkedList(),
-      new ParseOptions
+      parseOpts
     )
     .getOpenAPI
 
