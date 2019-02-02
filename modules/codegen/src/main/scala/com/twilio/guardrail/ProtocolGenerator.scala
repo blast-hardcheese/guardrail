@@ -296,7 +296,7 @@ object ProtocolGenerator {
   /**
     * returns objects grouped into hierarchies
     */
-  def groupHierarchies(definitions: List[(String, Model)]): List[ClassParent] = {
+  def groupHierarchies(definitions: List[(String, Model)]): (List[ClassParent], List[(String, Model)]) = {
 
     def firstInHierarchy(model: Model): Option[ModelImpl] =
       (model match {
@@ -330,9 +330,9 @@ object ProtocolGenerator {
         )
       )
 
-    definitions.map(classHierarchy _ tupled).collect {
-      case Some(x) if x.children.nonEmpty => x
-    }
+    definitions.partitionEither({ case (cls, model) =>
+      classHierarchy(cls, model).filterNot(_.children.isEmpty).toLeft((cls, model))
+    })
 
   }
 
@@ -349,17 +349,7 @@ object ProtocolGenerator {
     import S._
 
     val definitions = Option(swagger.getDefinitions).toList.flatMap(_.asScala)
-    val hierarchies = groupHierarchies(definitions)
-
-    val definitionsWithoutPoly: List[(String, Model)] = definitions.filter { // filter out polymorphic definitions
-      case (clsName, _: ComposedModel) if definitions.exists {
-            case (_, m: ComposedModel) => m.getInterfaces.asScala.headOption.exists(_.getSimpleRef == clsName)
-            case _                     => false
-          } =>
-        false
-      case (_, m: ModelImpl) if Option(m.getDiscriminator).isDefined => false
-      case _                                                         => true
-    }
+    val (hierarchies, definitionsWithoutPoly) = groupHierarchies(definitions)
 
     for {
       concreteTypes <- SwaggerUtil.extractConcreteTypes[L, F](definitions)
