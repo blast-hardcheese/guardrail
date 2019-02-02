@@ -365,21 +365,17 @@ object CirceProtocolGenerator {
     override def apply[A](fa: PolyProtocolTerm[ScalaLanguage, A]): Target[A] = fa match {
       case ExtractSuperClass(swagger, definitions) =>
         def allParents(model: Model): List[(String, Model, List[RefModel])] =
-          (model match {
+          model match {
             case elem: ComposedModel =>
-              NonEmptyList
-                .fromList(elem.getInterfaces.asScala.toList)
-                .flatMap({
-                  case NonEmptyList(head, tail) =>
-                    definitions.collectFirst {
-                      case (clsName, e) if head.getSimpleRef == clsName =>
-                        (clsName, e, tail.toList)
-                    }
-                })
-            case _ => None
-          }) match {
-            case Some(x @ (_, el, _)) => x :: allParents(el)
-            case _                    => Nil
+              elem.getInterfaces.asScala.toList match {
+                case head :: tail =>
+                  definitions.collectFirst {
+                    case (clsName, e) if head.getSimpleRef == clsName =>
+                      (clsName, e, tail.toList) :: allParents(e)
+                  }
+                case Nil => Nil
+              }
+            case _ => Nil
           }
 
         Target.pure(allParents(swagger))
