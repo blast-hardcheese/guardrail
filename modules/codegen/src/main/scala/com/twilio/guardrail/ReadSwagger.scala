@@ -24,8 +24,8 @@ object ReadSwagger {
     if (rs.path.toFile.exists()) {
       val opts = new ParseOptions()
       opts.setResolve(true)
-      opts.setResolveFully(true)
-      opts.setResolveCombinators(true)
+      // opts.setResolveFully(true)
+      // opts.setResolveCombinators(true)
       Option(new OpenAPIParser().readLocation(rs.path.toAbsolutePath.toString, new util.LinkedList(), opts).getOpenAPI)
         .map(rs.next)
         .toRight(s"Spec file ${rs.path} is incorrectly formatted.")
