@@ -147,6 +147,7 @@ val codegenSettings = Seq(
 lazy val root = (project in file("."))
   .settings(
     libraryDependencies ++= testDependencies,
+    libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.7.25",
     skip in publish := true
   )
   .dependsOn(codegen)

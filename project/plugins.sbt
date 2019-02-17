@@ -15,3 +15,5 @@ addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "2.3")
 addSbtPlugin("ohnosequences" % "sbt-github-release" % "0.7.0")
 
 addSbtPlugin("org.wartremover" % "sbt-wartremover" % "2.4.1")
+
+addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.9.2")
