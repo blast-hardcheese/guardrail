@@ -6,7 +6,7 @@ import _root_.io.swagger.v3.oas.models.media._
 import cats.data.NonEmptyList
 import cats.implicits._
 import cats.~>
-import com.github.javaparser.ast.`type`.{ ClassOrInterfaceType, PrimitiveType, Type }
+import com.github.javaparser.ast.`type`.{ PrimitiveType, Type }
 import com.twilio.guardrail.extract.{ Default, ScalaEmptyIsNull }
 import com.twilio.guardrail.generators.syntax.Java._
 import com.twilio.guardrail.generators.syntax.RichString
@@ -15,7 +15,7 @@ import com.twilio.guardrail.protocol.terms.protocol._
 import java.util.Locale
 import scala.collection.JavaConverters._
 import com.github.javaparser.JavaParser
-import com.github.javaparser.ast.{ ImportDeclaration, Node, NodeList }
+import com.github.javaparser.ast.{ Node, NodeList }
 import com.github.javaparser.ast.stmt._
 import com.github.javaparser.ast.Modifier.{ ABSTRACT, FINAL, PRIVATE, PUBLIC, STATIC }
 import com.github.javaparser.ast.body._

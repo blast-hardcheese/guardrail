@@ -1,14 +1,11 @@
 package com.twilio.guardrail
 package generators
 
-import _root_.io.swagger.v3.oas.models._
 import cats.implicits._
-import cats.syntax.either._
 import cats.~>
 import com.twilio.guardrail.extract.ScalaPackage
 import com.twilio.guardrail.generators.syntax.RichSchema
 import com.twilio.guardrail.languages.LA
-import com.twilio.guardrail.shims._
 import com.twilio.guardrail.terms._
 import scala.collection.JavaConverters._
 
