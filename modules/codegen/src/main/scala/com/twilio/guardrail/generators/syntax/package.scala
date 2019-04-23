@@ -1,6 +1,7 @@
 package com.twilio.guardrail.generators
 
 import java.util.Locale
+import io.swagger.v3.oas.models.media.Schema
 
 package object syntax {
   private val toPascalRegexes = List(
@@ -34,5 +35,10 @@ package object syntax {
       "([A-Z])".r
         .replaceAllIn(lowercased, m => '-' +: m.group(1).toLowerCase(Locale.US))
     }
+  }
+
+  implicit class RichSchema(value: Schema[_]) {
+    def showNotNull: String = showNotNullIndented(0)
+    def showNotNullIndented(indent: Int): String = ("  " * indent) + value.toString().lines.filterNot(_.contains(": null")).mkString("\n" + ("  " * indent))
   }
 }

@@ -16,6 +16,7 @@ import com.twilio.guardrail.terms.framework.FrameworkTerms
 import com.twilio.guardrail.extract.{ Default, VendorExtension, extractFromNames }
 import com.twilio.guardrail.extract.VendorExtension.VendorExtensible._
 import com.twilio.guardrail.generators.ScalaParameter
+import com.twilio.guardrail.generators.syntax.RichSchema
 import com.twilio.guardrail.languages.{ JavaLanguage, LA, ScalaLanguage }
 import com.twilio.guardrail.protocol.terms.Responses
 import com.twilio.guardrail.shims._
@@ -296,7 +297,10 @@ object SwaggerUtil {
             }
           } yield res
         case o: ObjectSchema =>
-          objectType(None).map(Resolved[L](_, None, None)) // TODO: o.getProperties
+          for {
+            _ <- log.debug(s"Not attempting to process properties from ${o.showNotNull}")
+            res <- objectType(None).map(Resolved[L](_, None, None)) // TODO: o.getProperties
+          } yield res
 
         case ref: Schema[_] if Option(ref.get$ref).isDefined =>
           getSimpleRef(ref).map(Deferred[L])
