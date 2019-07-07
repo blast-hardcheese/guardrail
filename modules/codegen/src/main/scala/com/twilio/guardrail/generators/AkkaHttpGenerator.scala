@@ -15,7 +15,7 @@ object AkkaHttpGenerator {
       case GetFrameworkImports(tracing) =>
         Target.pure(
           List(
-            q"import akka.http.scaladsl.model._",
+            q"import akka.http.scaladsl.model.{ BodyPartEntity, ContentType, ContentTypes, EntityStreamSizeException, ErrorInfo, FormData, HttpCharsets, HttpEntity, HttpHeader, HttpMessage, HttpMethod, HttpMethods, HttpProtocol, HttpProtocols, HttpRequest, HttpResponse, MediaTypes, Multipart, RequestEntity, ResponseEntity, StatusCode, StatusCodes, Uri }",
             q"import akka.http.scaladsl.model.headers.RawHeader",
             q"import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller, FromEntityUnmarshaller, FromRequestUnmarshaller, FromStringUnmarshaller}",
             q"import akka.http.scaladsl.marshalling.{Marshal, Marshaller, Marshalling, ToEntityMarshaller, ToResponseMarshaller}",
