@@ -22,5 +22,7 @@ addSbtPlugin("com.47deg"  % "sbt-microsites" % "0.9.7")
 
 addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.10.0-RC1")
 
+addSbtPlugin("org.scoverage"    %% "sbt-scoverage"  % "1.6.1")
+
 // for jdk11
 libraryDependencies += "com.sun.activation" % "javax.activation" % "1.2.0"
