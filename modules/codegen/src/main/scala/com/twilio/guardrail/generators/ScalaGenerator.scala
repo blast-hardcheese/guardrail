@@ -30,20 +30,26 @@ object ScalaGenerator {
     def apply[T](term: ScalaTerm[ScalaLanguage, T]): Target[T] = term match {
       case VendorPrefixes() => Target.pure(List("x-scala", "x-jvm"))
 
-      case LitString(value)                    => Target.pure(Lit.String(value))
-      case LitFloat(value)                     => Target.pure(Lit.Float(value))
-      case LitDouble(value)                    => Target.pure(Lit.Double(value))
-      case LitInt(value)                       => Target.pure(Lit.Int(value))
-      case LitLong(value)                      => Target.pure(Lit.Long(value))
-      case LitBoolean(value)                   => Target.pure(Lit.Boolean(value))
-      case LiftOptionalType(value)             => Target.pure(t"Option[${value}]")
-      case LiftOptionalTerm(value)             => Target.pure(q"Option(${value})")
-      case EmptyOptionalTerm()                 => Target.pure(q"None")
-      case EmptyArray()                        => Target.pure(q"Vector.empty")
-      case EmptyMap()                          => Target.pure(q"Map.empty")
-      case LiftVectorType(value, customTpe)    => Target.pure(t"${customTpe.getOrElse(t"Vector")}[${value}]")
-      case LiftVectorTerm(value)               => Target.pure(q"Vector(${value})")
-      case LiftMapType(value, customTpe)       => Target.pure(t"${customTpe.getOrElse(t"Map")}[String, ${value}]")
+      case LitString(value)                 => Target.pure(Lit.String(value))
+      case LitFloat(value)                  => Target.pure(Lit.Float(value))
+      case LitDouble(value)                 => Target.pure(Lit.Double(value))
+      case LitInt(value)                    => Target.pure(Lit.Int(value))
+      case LitLong(value)                   => Target.pure(Lit.Long(value))
+      case LitBoolean(value)                => Target.pure(Lit.Boolean(value))
+      case LiftOptionalType(value)          => Target.pure(t"Option[${value}]")
+      case LiftOptionalTerm(value)          => Target.pure(q"Option(${value})")
+      case EmptyOptionalTerm()              => Target.pure(q"None")
+      case EmptyArray()                     => Target.pure(q"Vector.empty")
+      case EmptyMap()                       => Target.pure(q"Map.empty")
+      case LiftVectorType(value, customTpe) => Target.pure(t"${customTpe.getOrElse(t"Vector")}[${value}]")
+      case LiftVectorTerm(value)            => Target.pure(q"Vector(${value})")
+      case LiftMapType(value, customTpe) =>
+        Target.pure(
+          customTpe.fold(t"Map[String, ${value}]") {
+            case t"$n[$k, _]" => t"$n[$k, ${value}]"
+            case tpe          => t"$tpe[String, ${value}]"
+          }
+        )
       case FullyQualifyPackageName(rawPkgName) => Target.pure("_root_" +: rawPkgName)
       case LookupEnumDefaultValue(tpe, defaultValue, values) => {
         // FIXME: Is there a better way to do this? There's a gap of coverage here

@@ -149,7 +149,11 @@ object CirceProtocolGenerator {
             case SwaggerUtil.DeferredMap(tpeName, customTpe) =>
               val concreteType = lookupTypeName(tpeName, concreteTypes)(identity)
               val innerType    = concreteType.getOrElse(Type.Name(tpeName))
-              (t"${customTpe.getOrElse(t"Map")}[String, $innerType]", Option.empty)
+              val tpe = customTpe.fold(t"Map[String, ${innerType}]") {
+                case t"$n[$k, _]" => t"$n[$k, ${innerType}]"
+                case tpe          => t"$tpe[String, ${innerType}]"
+              }
+              (tpe, Option.empty)
           }
 
           (finalDeclType, finalDefaultValue) = Option(isRequired)
@@ -362,7 +366,13 @@ object CirceProtocolGenerator {
               )
             case SwaggerUtil.DeferredMap(tpeName, customTpe) =>
               Target.fromOption(
-                lookupTypeName(tpeName, concreteTypes)(tpe => t"Vector[${customTpe.getOrElse(t"Map")}[String, ${tpe}]]"),
+                lookupTypeName(tpeName, concreteTypes)(
+                  innerType =>
+                    t"""Vector[${customTpe.fold(t"Map[String, ${innerType}]") {
+                      case t"$n[$k, _]" => t"$n[$k, ${innerType}]"
+                      case tpe          => t"$tpe[String, ${innerType}]"
+                    }}]"""
+                ),
                 s"Unresolved reference ${tpeName}"
               )
           }
