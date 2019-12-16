@@ -5,10 +5,8 @@ import _root_.io.swagger.v3.oas.models.media._
 import cats.data.NonEmptyList
 import cats.free.Free
 import cats.implicits._
-import com.twilio.guardrail.SwaggerUtil.Resolved
 import com.twilio.guardrail.core.{ Mappish, Tracker }
 import com.twilio.guardrail.core.implicits._
-import com.twilio.guardrail.extract.VendorExtension.VendorExtensible._
 import com.twilio.guardrail.generators.RawParameterType
 import com.twilio.guardrail.generators.syntax._
 import com.twilio.guardrail.languages.LA
@@ -22,10 +20,12 @@ import com.twilio.guardrail.extract.Default
 import scala.collection.JavaConverters._
 import scala.language.higherKinds
 
-case class ProtocolDefinitions[L <: LA](elems: List[StrictProtocolElems[L]],
-                                        protocolImports: List[L#Import],
-                                        packageObjectImports: List[L#Import],
-                                        packageObjectContents: List[L#ValueDefinition])
+case class ProtocolDefinitions[L <: LA](
+    elems: List[StrictProtocolElems[L]],
+    protocolImports: List[L#Import],
+    packageObjectImports: List[L#Import],
+    packageObjectContents: List[L#ValueDefinition]
+)
 sealed trait EmptyToNullBehaviour
 case object EmptyIsNull  extends EmptyToNullBehaviour
 case object EmptyIsEmpty extends EmptyToNullBehaviour
@@ -34,14 +34,16 @@ sealed trait RedactionBehaviour
 case object DataVisible  extends RedactionBehaviour
 case object DataRedacted extends RedactionBehaviour
 
-case class ProtocolParameter[L <: LA](term: L#MethodParameter,
-                                      name: String,
-                                      dep: Option[L#TermName],
-                                      rawType: RawParameterType,
-                                      readOnlyKey: Option[String],
-                                      emptyToNull: EmptyToNullBehaviour,
-                                      dataRedaction: RedactionBehaviour,
-                                      defaultValue: Option[L#Term])
+case class ProtocolParameter[L <: LA](
+    term: L#MethodParameter,
+    name: String,
+    dep: Option[L#TermName],
+    rawType: RawParameterType,
+    readOnlyKey: Option[String],
+    emptyToNull: EmptyToNullBehaviour,
+    dataRedaction: RedactionBehaviour,
+    defaultValue: Option[L#Term]
+)
 
 case class Discriminator[L <: LA](propertyName: String, mapping: Map[String, ProtocolElems[L]])
 
@@ -130,11 +132,11 @@ object ProtocolGenerator {
 
     // Default to `string` for untyped enums.
     // Currently, only plain strings are correctly supported anyway, so no big loss.
-    val tpeName = swagger.downField("type", _.getType()).map(_.filterNot(_ == "object").orElse(Some("string")))
+    val tpeName = swagger.downField("type", _.getType()).map(_.filterNot(_ == "object").orElse(Option("string")))
 
     for {
       enum          <- extractEnum(swagger.get)
-      customTpeName <- SwaggerUtil.customTypeName(swagger.get)
+      customTpeName <- SwaggerUtil.customTypeName(swagger)
       tpe           <- SwaggerUtil.typeName(tpeName, swagger.downField("format", _.getFormat()), customTpeName)
       fullType      <- selectType(NonEmptyList.fromList(dtoPackage :+ clsName).getOrElse(NonEmptyList.of(clsName)))
       res           <- enum.traverse(validProg(_, tpe, fullType))
@@ -168,12 +170,14 @@ object ProtocolGenerator {
       concreteTypes: List[PropMeta[L]],
       definitions: List[(String, Tracker[Schema[_]])],
       dtoPackage: List[String]
-  )(implicit F: FrameworkTerms[L, F],
-    P: PolyProtocolTerms[L, F],
-    E: EnumProtocolTerms[L, F],
-    M: ModelProtocolTerms[L, F],
-    Sc: ScalaTerms[L, F],
-    Sw: SwaggerTerms[L, F]): Free[F, ProtocolElems[L]] = {
+  )(
+      implicit F: FrameworkTerms[L, F],
+      P: PolyProtocolTerms[L, F],
+      E: EnumProtocolTerms[L, F],
+      M: ModelProtocolTerms[L, F],
+      Sc: ScalaTerms[L, F],
+      Sw: SwaggerTerms[L, F]
+  ): Free[F, ProtocolElems[L]] = {
     import M._
     import P._
     import Sc._
@@ -202,12 +206,14 @@ object ProtocolGenerator {
             customType   <- SwaggerUtil.customTypeName(prop)
             resolvedType <- SwaggerUtil.propMeta[L, F](prop)
             defValue     <- defaultValue(typeName, prop.get, isRequired, definitions.map(_.map(_.get)))
-            res <- transformProperty(hierarchy.name, needCamelSnakeConversion, concreteTypes)(name,
-                                                                                              prop.get,
-                                                                                              resolvedType,
-                                                                                              isRequired,
-                                                                                              customType.isDefined,
-                                                                                              defValue)
+            res <- transformProperty(hierarchy.name, needCamelSnakeConversion, concreteTypes)(
+              name,
+              prop.get,
+              resolvedType,
+              isRequired,
+              customType.isDefined,
+              defValue
+            )
           } yield res
       })
       definition  <- renderSealedTrait(hierarchy.name, params, discriminator, parents, children)
@@ -227,10 +233,12 @@ object ProtocolGenerator {
     }
   }
 
-  def extractParents[L <: LA, F[_]](elem: Tracker[ComposedSchema],
-                                    definitions: List[(String, Tracker[Schema[_]])],
-                                    concreteTypes: List[PropMeta[L]],
-                                    dtoPackage: List[String])(
+  def extractParents[L <: LA, F[_]](
+      elem: Tracker[ComposedSchema],
+      definitions: List[(String, Tracker[Schema[_]])],
+      concreteTypes: List[PropMeta[L]],
+      dtoPackage: List[String]
+  )(
       implicit M: ModelProtocolTerms[L, F],
       F: FrameworkTerms[L, F],
       E: EnumProtocolTerms[L, F],
@@ -268,13 +276,15 @@ object ProtocolGenerator {
             requiredFields = getRequiredFieldsRec(_extends) ++ concreteInterfaces.flatMap(getRequiredFieldsRec)
             _withProps <- concreteInterfaces.traverse(extractProperties)
             props = _extendsProps ++ _withProps.flatten
-            (params, _) <- prepareProperties(NonEmptyList.of(clsName),
-                                             classMapping,
-                                             props.map(_.map(_.get)),
-                                             requiredFields,
-                                             concreteTypes,
-                                             definitions,
-                                             dtoPackage)
+            (params, _) <- prepareProperties(
+              NonEmptyList.of(clsName),
+              classMapping,
+              props,
+              requiredFields,
+              concreteTypes,
+              definitions,
+              dtoPackage
+            )
             interfacesCls = interfaces.flatMap(_.downField("$ref", _.get$ref).map(_.map(_.split("/").last)).get)
             tpe <- parseTypeName(clsName)
 
@@ -282,29 +292,30 @@ object ProtocolGenerator {
               _.refine[Free[F, List[Discriminator[L]]]]({ case m: ObjectSchema => m })(m => Discriminator.fromSchema(m.get).map(_.toList))
                 .getOrElse(Free.pure[F, List[Discriminator[L]]](List.empty))
             )
-          } yield
-            tpe
-              .map(
-                SuperClass[L](
-                  clsName,
-                  _,
-                  interfacesCls,
-                  params,
-                  discriminators
-                )
+          } yield tpe
+            .map(
+              SuperClass[L](
+                clsName,
+                _,
+                interfacesCls,
+                params,
+                discriminators
               )
-              .toList
+            )
+            .toList
       }
 
     } yield supper
   }
 
-  private[this] def fromModel[L <: LA, F[_]](clsName: NonEmptyList[String],
-                                             model: Tracker[Schema[_]],
-                                             parents: List[SuperClass[L]],
-                                             concreteTypes: List[PropMeta[L]],
-                                             definitions: List[(String, Tracker[Schema[_]])],
-                                             dtoPackage: List[String])(
+  private[this] def fromModel[L <: LA, F[_]](
+      clsName: NonEmptyList[String],
+      model: Tracker[Schema[_]],
+      parents: List[SuperClass[L]],
+      concreteTypes: List[PropMeta[L]],
+      definitions: List[(String, Tracker[Schema[_]])],
+      dtoPackage: List[String]
+  )(
       implicit M: ModelProtocolTerms[L, F],
       F: FrameworkTerms[L, F],
       E: EnumProtocolTerms[L, F],
@@ -319,12 +330,12 @@ object ProtocolGenerator {
       props <- extractProperties(model)
       requiredFields           = getRequiredFieldsRec(model)
       needCamelSnakeConversion = props.forall { case (k, _) => couldBeSnakeCase(k) }
-      (params, nestedDefinitions) <- prepareProperties(clsName, Map.empty, props.map(_.map(_.get)), requiredFields, concreteTypes, definitions, dtoPackage)
+      (params, nestedDefinitions) <- prepareProperties(clsName, Map.empty, props, requiredFields, concreteTypes, definitions, dtoPackage)
       defn                        <- renderDTOClass(clsName.last, params, parents)
       encoder                     <- encodeModel(clsName.last, needCamelSnakeConversion, params, parents)
       decoder                     <- decodeModel(clsName.last, needCamelSnakeConversion, params, parents)
       tpe                         <- parseTypeName(clsName.last)
-      fullType                    <- selectType(NonEmptyList.fromList(dtoPackage ++ clsName.toList).head)
+      fullType                    <- selectType(dtoPackage.foldRight(clsName)((x, xs) => xs.prepend(x)))
       staticDefns                 <- renderDTOStaticDefns(clsName.last, List.empty, encoder, decoder)
       result <- if (parents.isEmpty && props.isEmpty) Free.pure[F, Either[String, ClassDefinition[L]]](Left("Entity isn't model"))
       else {
@@ -355,18 +366,19 @@ object ProtocolGenerator {
   private def prepareProperties[L <: LA, F[_]](
       clsName: NonEmptyList[String],
       propertyToTypeLookup: Map[String, String],
-      props: List[(String, Schema[_])],
+      props: List[(String, Tracker[Schema[_]])],
       requiredFields: List[String],
       concreteTypes: List[PropMeta[L]],
       definitions: List[(String, Tracker[Schema[_]])],
-      dtoPackage: List[String],
-  )(implicit M: ModelProtocolTerms[L, F],
-    F: FrameworkTerms[L, F],
-    E: EnumProtocolTerms[L, F],
-    P: PolyProtocolTerms[L, F],
-    Sc: ScalaTerms[L, F],
-    Sw: SwaggerTerms[L, F]): Free[F, (List[ProtocolParameter[L]], List[NestedProtocolElems[L]])] = {
-    import F._
+      dtoPackage: List[String]
+  )(
+      implicit M: ModelProtocolTerms[L, F],
+      F: FrameworkTerms[L, F],
+      E: EnumProtocolTerms[L, F],
+      P: PolyProtocolTerms[L, F],
+      Sc: ScalaTerms[L, F],
+      Sw: SwaggerTerms[L, F]
+  ): Free[F, (List[ProtocolParameter[L]], List[NestedProtocolElems[L]])] = {
     import M._
     import Sc._
     def getClsName(name: String): NonEmptyList[String] = propertyToTypeLookup.get(name).map(NonEmptyList.of(_)).getOrElse(clsName)
@@ -375,18 +387,18 @@ object ProtocolGenerator {
       val nestedClassName = getClsName(name).append(name.toCamelCase.capitalize)
       schema
         .refine[Free[F, Option[Either[String, NestedProtocolElems[L]]]]]({ case x: ObjectSchema => x })(
-          _ => fromModel(nestedClassName, schema, List.empty, concreteTypes, definitions, dtoPackage).map(Some(_))
+          _ => fromModel(nestedClassName, schema, List.empty, concreteTypes, definitions, dtoPackage).map(Option(_))
         )
         .orRefine({ case o: ComposedSchema => o })(
           o =>
             for {
               parents              <- extractParents(o, definitions, concreteTypes, dtoPackage)
               maybeClassDefinition <- fromModel(nestedClassName, schema, parents, concreteTypes, definitions, dtoPackage)
-            } yield Some(maybeClassDefinition)
+            } yield Option(maybeClassDefinition)
         )
         .orRefine({ case a: ArraySchema => a })(_.downField("items", _.getItems()).indexedCosequence.flatTraverse(processProperty(name, _)))
         .orRefine({ case s: StringSchema if Option(s.getEnum).map(_.asScala).exists(_.nonEmpty) => s })(
-          s => fromEnum(nestedClassName.last, s, dtoPackage).map(Some(_))
+          s => fromEnum(nestedClassName.last, s, dtoPackage).map(Option(_))
         )
         .getOrElse(Free.pure[F, Option[Either[String, NestedProtocolElems[L]]]](Option.empty))
     }
@@ -397,56 +409,55 @@ object ProtocolGenerator {
           val typeName = getClsName(name).append(name.toCamelCase.capitalize)
           for {
             tpe                   <- selectType(typeName)
-            maybeNestedDefinition <- processProperty(name, Tracker.hackyAdapt(schema, Vector.empty))
-            resolvedType <- maybeNestedDefinition.fold(SwaggerUtil.propMetaWithName(tpe, schema)) {
-              case Left(_)  => objectType(None).map(Resolved(_, None, None, None, None))
-              case Right(_) => SwaggerUtil.propMetaWithName(tpe, schema)
-            }
-            customType <- SwaggerUtil.customTypeName(schema)
+            maybeNestedDefinition <- processProperty(name, schema)
+            resolvedType          <- SwaggerUtil.propMetaWithName(tpe, schema)
+            customType            <- SwaggerUtil.customTypeName(schema.get)
             isRequired = requiredFields.contains(name)
-            defValue <- defaultValue(typeName, schema, isRequired, definitions.map(_.map(_.get)))
-            parameter <- transformProperty(getClsName(name).last, needCamelSnakeConversion, concreteTypes)(name,
-                                                                                                           schema,
-                                                                                                           resolvedType,
-                                                                                                           isRequired,
-                                                                                                           customType.isDefined,
-                                                                                                           defValue)
+            defValue <- defaultValue(typeName, schema.get, isRequired, definitions.map(_.map(_.get)))
+            parameter <- transformProperty(getClsName(name).last, needCamelSnakeConversion, concreteTypes)(
+              name,
+              schema.get,
+              resolvedType,
+              isRequired,
+              customType.isDefined,
+              defValue
+            )
           } yield (parameter, maybeNestedDefinition.flatMap(_.toOption))
       }
       (params, nestedDefinitions) = paramsAndNestedDefinitions.unzip
     } yield params -> nestedDefinitions.flatten
   }
 
-  def modelTypeAlias[L <: LA, F[_]](clsName: String, abstractModel: Schema[_])(
+  def modelTypeAlias[L <: LA, F[_]](clsName: String, abstractModel: Tracker[Schema[_]])(
       implicit
       Fw: FrameworkTerms[L, F],
       Sc: ScalaTerms[L, F],
       Sw: SwaggerTerms[L, F]
   ): Free[F, ProtocolElems[L]] = {
     import Fw._
-    val model = abstractModel match {
-      case m: ObjectSchema => Some(m)
-      case m: ComposedSchema =>
-        m.getAllOf.asScala.toList.get(1).flatMap {
-          case m: ObjectSchema => Some(m)
-          case _               => None
-        }
-      case _ => None
-    }
+    val model: Option[Tracker[ObjectSchema]] = abstractModel
+      .refine[Option[Tracker[ObjectSchema]]]({ case m: ObjectSchema => m })(x => Option(x))
+      .orRefine({ case m: ComposedSchema => m })(
+        _.downField("allOf", _.getAllOf()).indexedCosequence
+          .get(1)
+          .flatMap(
+            _.refine({ case o: ObjectSchema => o })(Option.apply)
+              .orRefineFallback(_ => None)
+          )
+      )
+      .orRefineFallback(_ => None)
     for {
-      tpe <- model
-        .flatMap(model => Option(model.getType))
-        .fold[Free[F, L#Type]](objectType(None))(
-          raw =>
-            model
-              .flatTraverse(SwaggerUtil.customTypeName[L, F, ObjectSchema])
-              .flatMap(
-                customTypeName =>
-                  SwaggerUtil.typeName[L, F](Tracker.hackyAdapt(Option(raw), Vector.empty),
-                                             Tracker.hackyAdapt(model.flatMap(f => Option(f.getFormat)), Vector.empty),
-                                             customTypeName)
-            )
-        )
+      tpe <- model.fold[Free[F, L#Type]](objectType(None)) { m =>
+        val raw = m.downField("type", _.getType())
+        for {
+          tpeName <- SwaggerUtil.customTypeName[L, F, Tracker[ObjectSchema]](m)
+          res <- SwaggerUtil.typeName[L, F](
+            raw,
+            m.downField("format", _.getFormat()),
+            tpeName
+          )
+        } yield res
+      }
       res <- typeAlias[L, F](clsName, tpe)
     } yield res
   }
@@ -464,7 +475,7 @@ object ProtocolGenerator {
   def typeAlias[L <: LA, F[_]](clsName: String, tpe: L#Type): Free[F, ProtocolElems[L]] =
     Free.pure(RandomType[L](clsName, tpe))
 
-  def fromArray[L <: LA, F[_]](clsName: String, arr: ArraySchema, concreteTypes: List[PropMeta[L]])(
+  def fromArray[L <: LA, F[_]](clsName: String, arr: Tracker[ArraySchema], concreteTypes: List[PropMeta[L]])(
       implicit R: ArrayProtocolTerms[L, F],
       F: FrameworkTerms[L, F],
       P: ProtocolSupportTerms[L, F],
@@ -486,12 +497,13 @@ object ProtocolGenerator {
     def required: List[String]
   }
   case class ClassChild[L <: LA](name: String, model: Tracker[Schema[_]], children: List[ClassChild[L]], required: List[String]) extends ClassHierarchy[L]
-  case class ClassParent[L <: LA](name: String,
-                                  model: Tracker[Schema[_]],
-                                  children: List[ClassChild[L]],
-                                  discriminator: Discriminator[L],
-                                  required: List[String])
-      extends ClassHierarchy[L]
+  case class ClassParent[L <: LA](
+      name: String,
+      model: Tracker[Schema[_]],
+      children: List[ClassChild[L]],
+      discriminator: Discriminator[L],
+      required: List[String]
+  ) extends ClassHierarchy[L]
 
   /**
     * returns objects grouped into hierarchies
@@ -581,7 +593,7 @@ object ProtocolGenerator {
                 for {
                   enum  <- fromEnum(clsName, m, dtoPackage)
                   model <- fromModel(NonEmptyList.of(clsName), m, List.empty, concreteTypes, definitions.value, dtoPackage)
-                  alias <- modelTypeAlias(clsName, m.get)
+                  alias <- modelTypeAlias(clsName, m)
                 } yield enum.orElse(model).getOrElse(alias)
             )
             .orRefine({ case c: ComposedSchema => c })(
@@ -589,24 +601,24 @@ object ProtocolGenerator {
                 for {
                   parents <- extractParents(comp, definitions.value, concreteTypes, dtoPackage)
                   model   <- fromModel(NonEmptyList.of(clsName), comp, parents, concreteTypes, definitions.value, dtoPackage)
-                  alias   <- modelTypeAlias(clsName, comp.get)
+                  alias   <- modelTypeAlias(clsName, comp)
                 } yield model.getOrElse(alias)
             )
-            .orRefine({ case a: ArraySchema => a })(arr => fromArray(clsName, arr.get, concreteTypes))
+            .orRefine({ case a: ArraySchema => a })(arr => fromArray(clsName, arr, concreteTypes))
             .orRefine({ case o: ObjectSchema => o })(
               m =>
                 for {
                   enum  <- fromEnum(clsName, m, dtoPackage)
                   model <- fromModel(NonEmptyList.of(clsName), m, List.empty, concreteTypes, definitions.value, dtoPackage)
-                  alias <- modelTypeAlias(clsName, m.get)
+                  alias <- modelTypeAlias(clsName, m)
                 } yield enum.orElse(model).getOrElse(alias)
             )
             .valueOr(
               x =>
                 for {
-                  tpeName        <- getType(x.get)
+                  tpeName        <- getType(x)
                   customTypeName <- SwaggerUtil.customTypeName(x.get)
-                  tpe            <- SwaggerUtil.typeName[L, F](Tracker.hackyAdapt(Option(tpeName), x.history), x.downField("format", _.getFormat()), customTypeName)
+                  tpe            <- SwaggerUtil.typeName[L, F](tpeName.map(Option(_)), x.downField("format", _.getFormat()), customTypeName)
                   res            <- typeAlias(clsName, tpe)
                 } yield res
             )
@@ -635,10 +647,16 @@ object ProtocolGenerator {
           .getOrElse(Free.pure(None))
       case None =>
         schema match {
-          case _: MapSchema if isRequired =>
-            emptyMap.map(Some(_))
-          case _: ArraySchema if isRequired =>
-            emptyArray.map(Some(_))
+          case map: MapSchema if isRequired =>
+            for {
+              customTpe <- SwaggerUtil.customMapTypeName(map)
+              result    <- customTpe.fold(emptyMap.map(Option(_)))(_ => Free.pure(None))
+            } yield result
+          case arr: ArraySchema if isRequired =>
+            for {
+              customTpe <- SwaggerUtil.customArrayTypeName(arr)
+              result    <- customTpe.fold(emptyArray.map(Option(_)))(_ => Free.pure(None))
+            } yield result
           case p: BooleanSchema =>
             Default(p).extract[Boolean].fold(empty)(litBoolean(_).map(Some(_)))
           case p: NumberSchema if p.getFormat == "double" =>

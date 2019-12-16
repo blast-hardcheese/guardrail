@@ -17,9 +17,11 @@ class SwaggerTerms[L <: LA, F[_]](implicit I: InjectK[SwaggerTerm[L, ?], F]) {
   def extractCommonRequestBodies(components: Option[Components]): Free[F, Map[String, RequestBody]] =
     Free.inject[SwaggerTerm[L, ?], F](ExtractCommonRequestBodies(components))
 
-  def extractOperations(paths: Tracker[Mappish[List, String, PathItem]],
-                        commonRequestBodies: Map[String, RequestBody],
-                        globalSecurityRequirements: Option[SecurityRequirements]): Free[F, List[RouteMeta]] =
+  def extractOperations(
+      paths: Tracker[Mappish[List, String, PathItem]],
+      commonRequestBodies: Map[String, RequestBody],
+      globalSecurityRequirements: Option[SecurityRequirements]
+  ): Free[F, List[RouteMeta]] =
     Free.inject[SwaggerTerm[L, ?], F](ExtractOperations(paths, commonRequestBodies, globalSecurityRequirements))
 
   def extractApiKeySecurityScheme(schemeName: String, securityScheme: SwSecurityScheme, tpe: Option[L#Type]): Free[F, ApiKeySecurityScheme[L]] =
@@ -35,7 +37,7 @@ class SwaggerTerms[L <: LA, F[_]](implicit I: InjectK[SwaggerTerm[L, ?], F]) {
     Free.inject[SwaggerTerm[L, ?], F](GetClassName(operation, vendorPrefixes))
   def getParameterName(parameter: Parameter): Free[F, String] =
     Free.inject[SwaggerTerm[L, ?], F](GetParameterName(parameter))
-  def getBodyParameterSchema(parameter: Tracker[Parameter]): Free[F, Schema[_]] =
+  def getBodyParameterSchema(parameter: Tracker[Parameter]): Free[F, Tracker[Schema[_]]] =
     Free.inject[SwaggerTerm[L, ?], F](GetBodyParameterSchema(parameter))
 
   def getHeaderParameterType(parameter: Tracker[Parameter]): Free[F, Tracker[String]] = Free.inject[SwaggerTerm[L, ?], F](GetHeaderParameterType(parameter))
@@ -59,10 +61,10 @@ class SwaggerTerms[L <: LA, F[_]](implicit I: InjectK[SwaggerTerm[L, ?], F]) {
   def getSimpleRef(ref: Tracker[Option[Schema[_]]]): Free[F, String] =
     Free.inject[SwaggerTerm[L, ?], F](GetSimpleRef(ref))
 
-  def getItems(arr: ArraySchema): Free[F, Schema[_]] =
+  def getItems(arr: Tracker[ArraySchema]): Free[F, Tracker[Schema[_]]] =
     Free.inject[SwaggerTerm[L, ?], F](GetItems(arr))
 
-  def getType(model: Schema[_]): Free[F, String] =
+  def getType(model: Tracker[Schema[_]]): Free[F, Tracker[String]] =
     Free.inject[SwaggerTerm[L, ?], F](GetType(model))
 
   def fallbackPropertyTypeHandler(prop: Schema[_]): Free[F, L#Type] =

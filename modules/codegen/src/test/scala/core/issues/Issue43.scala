@@ -82,12 +82,12 @@ class Issue43 extends FunSpec with Matchers with SwaggerSpecRunner {
     val (
       ProtocolDefinitions(
         ClassDefinition(nameCat, tpeCat, fullTypeCat, clsCat, staticDefnsCat, catParents) :: ClassDefinition(nameDog, tpeDog, _, _, _, _) :: ADT(
-          namePet,
-          tpePet,
-          fullTpePet,
-          trtPet,
-          staticDefns
-        ) :: Nil,
+              namePet,
+              tpePet,
+              fullTpePet,
+              trtPet,
+              staticDefns
+            ) :: Nil,
         _,
         _,
         _
@@ -145,6 +145,7 @@ class Issue43 extends FunSpec with Matchers with SwaggerSpecRunner {
             implicit val addPathHuntingSkill: AddPath[HuntingSkill] = AddPath.build(_.value)
             implicit val showHuntingSkill: Show[HuntingSkill] = Show.build(_.value)
             def parse(value: String): Option[HuntingSkill] = values.find(_.value == value)
+            implicit val order: cats.Order[HuntingSkill] = cats.Order.by[HuntingSkill, Int](values.indexOf)
           }
         }
       """

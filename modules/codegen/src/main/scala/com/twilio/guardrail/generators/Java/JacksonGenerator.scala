@@ -32,13 +32,15 @@ object JacksonGenerator {
   private val BIG_INTEGER_FQ_TYPE = StaticJavaParser.parseClassOrInterfaceType("java.math.BigInteger")
   private val BIG_DECIMAL_FQ_TYPE = StaticJavaParser.parseClassOrInterfaceType("java.math.BigDecimal")
 
-  private case class ParameterTerm(propertyName: String,
-                                   parameterName: String,
-                                   fieldType: Type,
-                                   parameterType: Type,
-                                   rawType: RawParameterType,
-                                   defaultValue: Option[Expression],
-                                   dataRedacted: RedactionBehaviour)
+  private case class ParameterTerm(
+      propertyName: String,
+      parameterName: String,
+      fieldType: Type,
+      parameterType: Type,
+      rawType: RawParameterType,
+      defaultValue: Option[Expression],
+      dataRedacted: RedactionBehaviour
+  )
 
   // returns a tuple of (requiredTerms, optionalTerms)
   // note that required terms _that have a default value_ are conceptually optional.
@@ -97,26 +99,26 @@ object JacksonGenerator {
     new BlockStmt(
       (
         List[Statement](new ExpressionStmt(superCall)) ++
-          terms
-            .map(
-              term =>
-                new ExpressionStmt(
-                  new AssignExpr(
-                    new FieldAccessExpr(new ThisExpr, term.parameterName),
-                    term.fieldType match {
-                      case _: PrimitiveType => new NameExpr(term.parameterName)
-                      case ft if ft.isOptional =>
-                        new ConditionalExpr(
-                          new BinaryExpr(new NameExpr(term.parameterName), new NullLiteralExpr, BinaryExpr.Operator.EQUALS),
-                          new MethodCallExpr(new NameExpr("Optional"), "empty"),
-                          new NameExpr(term.parameterName)
-                        )
-                      case _ => requireNonNullExpr(term.parameterName)
-                    },
-                    AssignExpr.Operator.ASSIGN
+            terms
+              .map(
+                term =>
+                  new ExpressionStmt(
+                    new AssignExpr(
+                      new FieldAccessExpr(new ThisExpr, term.parameterName),
+                      term.fieldType match {
+                        case _: PrimitiveType => new NameExpr(term.parameterName)
+                        case ft if ft.isOptional =>
+                          new ConditionalExpr(
+                            new BinaryExpr(new NameExpr(term.parameterName), new NullLiteralExpr, BinaryExpr.Operator.EQUALS),
+                            new MethodCallExpr(new NameExpr("Optional"), "empty"),
+                            new NameExpr(term.parameterName)
+                          )
+                        case _ => requireNonNullExpr(term.parameterName)
+                      },
+                      AssignExpr.Operator.ASSIGN
+                    )
                   )
               )
-            )
       ).toNodeList
     )
 
@@ -267,21 +269,22 @@ object JacksonGenerator {
             "com.fasterxml.jackson.annotation.JsonCreator",
             "com.fasterxml.jackson.annotation.JsonValue"
           ).traverse(safeParseRawImport)
-        } yield
-          StaticDefns[JavaLanguage](
-            className = clsName,
-            extraImports = extraImports,
-            definitions = List.empty
-          )
+        } yield StaticDefns[JavaLanguage](
+          className = clsName,
+          extraImports = extraImports,
+          definitions = List.empty
+        )
 
       case BuildAccessor(clsName, termName) =>
         Target.pure(new Name(s"${clsName}.${termName}"))
     }
   }
 
-  private def renderDTOClass(clsName: String,
-                             selfParams: List[ProtocolParameter[JavaLanguage]],
-                             parents: List[SuperClass[JavaLanguage]]): Target[TypeDeclaration[_ <: TypeDeclaration[_]]] = {
+  private def renderDTOClass(
+      clsName: String,
+      selfParams: List[ProtocolParameter[JavaLanguage]],
+      parents: List[SuperClass[JavaLanguage]]
+  ): Target[TypeDeclaration[_ <: TypeDeclaration[_]]] = {
     val parentsWithDiscriminators = parents.collect({ case p if p.discriminators.nonEmpty => p })
     for {
       dtoClassType <- safeParseClassOrInterfaceType(clsName)
@@ -335,8 +338,10 @@ object JacksonGenerator {
                   case Some(fmt) =>
                     Target.raiseError[Expression](s"Unsupported discriminator type '$tpe' with format '$fmt' for property '${term.propertyName}'")
                   case None =>
-                    parseLiteral(x => new ObjectCreationExpr(null, BIG_INTEGER_FQ_TYPE, new NodeList(new StringLiteralExpr(new BigInteger(x).toString))),
-                                 "BigInteger")
+                    parseLiteral(
+                      x => new ObjectCreationExpr(null, BIG_INTEGER_FQ_TYPE, new NodeList(new StringLiteralExpr(new BigInteger(x).toString))),
+                      "BigInteger"
+                    )
                 }
               case Some(tpe @ "number") =>
                 term.rawType.format match {
@@ -345,9 +350,10 @@ object JacksonGenerator {
                   case Some(fmt) =>
                     Target.raiseError[Expression](s"Unsupported discriminator type '$tpe' with format '$fmt' for property '${term.propertyName}'")
                   case None =>
-                    parseLiteral(x =>
-                                   new ObjectCreationExpr(null, BIG_DECIMAL_FQ_TYPE, new NodeList(new StringLiteralExpr(new java.math.BigDecimal(x).toString))),
-                                 "BigDecimal")
+                    parseLiteral(
+                      x => new ObjectCreationExpr(null, BIG_DECIMAL_FQ_TYPE, new NodeList(new StringLiteralExpr(new java.math.BigDecimal(x).toString))),
+                      "BigDecimal"
+                    )
                 }
               case Some(tpe) =>
                 Target.raiseError[Expression](s"Unsupported discriminator type '$tpe' for property '${term.propertyName}'")
@@ -366,8 +372,8 @@ object JacksonGenerator {
         .map(_.toMap)
     } yield {
       val params = parents.filterNot(parent => parentOpt.contains(parent)).flatMap(_.params) ++ selfParams.filterNot(
-        param => discriminatorNames.contains(param.term.getName.getIdentifier) || parentParamNames.contains(param.term.getName.getIdentifier)
-      )
+              param => discriminatorNames.contains(param.term.getName.getIdentifier) || parentParamNames.contains(param.term.getName.getIdentifier)
+            )
       val (requiredTerms, optionalTerms) = sortParams(params)
       val terms                          = requiredTerms ++ optionalTerms
 
@@ -430,13 +436,13 @@ object JacksonGenerator {
         .flatMap(
           l =>
             (new StringLiteralExpr(s"${l.head.parameterName}="), parameterToStringExpr(l.head)) +:
-              l.tail.map(
-              term =>
-                (
-                  new StringLiteralExpr(s", ${term.parameterName}="),
-                  parameterToStringExpr(term)
-              )
-          )
+                l.tail.map(
+                  term =>
+                    (
+                      new StringLiteralExpr(s", ${term.parameterName}="),
+                      parameterToStringExpr(term)
+                    )
+                )
         )
 
       val toStringMethod = dtoClass
@@ -479,7 +485,7 @@ object JacksonGenerator {
                 "equals",
                 new NodeList[Expression](parameterGetterCall(term, Some("other")))
               )
-        }
+          }
       )
       val returnExpr = NonEmptyList
         .fromList(equalsConditions)
@@ -513,12 +519,14 @@ object JacksonGenerator {
               null
             ),
             new ExpressionStmt(
-              new VariableDeclarationExpr(new VariableDeclarator(
-                                            dtoClassType,
-                                            "other",
-                                            new CastExpr(dtoClassType, new NameExpr("o"))
-                                          ),
-                                          finalModifier)
+              new VariableDeclarationExpr(
+                new VariableDeclarator(
+                  dtoClassType,
+                  "other",
+                  new CastExpr(dtoClassType, new NameExpr("o"))
+                ),
+                finalModifier
+              )
             ),
             new ReturnStmt(returnExpr)
           )
@@ -556,10 +564,10 @@ object JacksonGenerator {
           )(
             dv =>
               if (fieldType.isOptional) {
-                optionalOfExpr(dv)
+                optionalOfNullableExpr(dv)
               } else {
                 dv
-            }
+              }
           )
           builderClass.addFieldWithInitializer(fieldType, parameterName, initializer, PRIVATE)
       })
@@ -632,7 +640,7 @@ object JacksonGenerator {
                         case (_: PrimitiveType, _) => new NameExpr(parameterName)
                         case (ft, pt) if ft.isOptional && pt.isPrimitiveType =>
                           new MethodCallExpr(new NameExpr("Optional"), "of", new NodeList[Expression](new NameExpr(parameterName)))
-                        case (ft, _) if ft.isOptional => optionalOfExpr(new NameExpr(parameterName))
+                        case (ft, _) if ft.isOptional => optionalOfNullableExpr(new NameExpr(parameterName))
                         case _                        => requireNonNullExpr(parameterName)
                       },
                       AssignExpr.Operator.ASSIGN
@@ -701,14 +709,14 @@ object JacksonGenerator {
               builderBuildTerms
                 .filterNot(_.fieldType.isPrimitiveType)
                 .map(term => new ExpressionStmt(requireNonNullExpr(new FieldAccessExpr(new ThisExpr, term.parameterName)))) :+ new ReturnStmt(
-                new ObjectCreationExpr(
-                  null,
-                  StaticJavaParser.parseClassOrInterfaceType(clsName),
-                  new NodeList(
-                    builderBuildTerms.map(param => new FieldAccessExpr(new ThisExpr, param.parameterName)): _*
+                    new ObjectCreationExpr(
+                      null,
+                      StaticJavaParser.parseClassOrInterfaceType(clsName),
+                      new NodeList(
+                        builderBuildTerms.map(param => new FieldAccessExpr(new ThisExpr, param.parameterName)): _*
+                      )
+                    )
                   )
-                )
-              )
             ).toNodeList
           )
         )
@@ -733,7 +741,7 @@ object JacksonGenerator {
                   .lastOption
                   .toList
                   .flatMap(_.downField("properties", _.getProperties).indexedCosequence.value.toList)
-            )
+              )
           )
           .orRefine({ case x: Schema[_] if Option(x.get$ref()).isDefined => x })(
             comp => Target.raiseError(s"Attempted to extractProperties for a ${comp.get.getClass()}, unsure what to do here (${comp.showHistory})")
@@ -760,15 +768,21 @@ object JacksonGenerator {
                   safeParseType(tpeName)
                 }
                 tpe.map((_, Option.empty))
-              case SwaggerUtil.DeferredArray(tpeName) =>
+              case SwaggerUtil.DeferredArray(tpeName, containerTpe) =>
                 for {
-                  fqListType <- safeParseClassOrInterfaceType("java.util.List")
+                  fqListType <- containerTpe.fold(safeParseClassOrInterfaceType("java.util.List")) {
+                    case ci: ClassOrInterfaceType => Target.pure(ci)
+                    case t                        => Target.raiseError(s"Supplied type was not supported: ${t}")
+                  }
                   concreteType = lookupTypeName(tpeName, concreteTypes)(Target.pure)
                   innerType <- concreteType.getOrElse(safeParseType(tpeName))
                 } yield (fqListType.setTypeArguments(innerType), Option.empty)
-              case SwaggerUtil.DeferredMap(tpeName) =>
+              case SwaggerUtil.DeferredMap(tpeName, containerTpe) =>
                 for {
-                  fqMapType <- safeParseClassOrInterfaceType("java.util.Map")
+                  fqMapType <- containerTpe.fold(safeParseClassOrInterfaceType("java.util.Map")) {
+                    case ci: ClassOrInterfaceType => Target.pure(ci)
+                    case t                        => Target.raiseError(s"Supplied type was not supported: ${t}")
+                  }
                   concreteType = lookupTypeName(tpeName, concreteTypes)(Target.pure)
                   innerType <- concreteType.getOrElse(safeParseType(tpeName))
                 } yield (fqMapType.setTypeArguments(STRING_TYPE, innerType), Option.empty)
@@ -781,10 +795,10 @@ object JacksonGenerator {
             expressionDefaultValue <- defaultValue match {
               case Some(e: Expression) => Target.pure(Some(e))
               case Some(_) =>
-                Target.log.warning(s"Can't generate default value for class $clsName and property $name.").map(_ => None)
+                Target.log.warning(s"Can't generate default value for class $clsName and property $name.") >> Target.pure(None)
               case None => Target.pure(None)
             }
-            _declDefaultPair <- Option(isRequired)
+            (finalDeclType, finalDefaultValue) <- Option(isRequired)
               .filterNot(_ == false)
               .fold[Target[(Type, Option[Expression])]](
                 (
@@ -799,7 +813,6 @@ object JacksonGenerator {
                   )
                 ).mapN((_, _))
               )(Function.const(Target.pure((tpe, expressionDefaultValue))) _)
-            (finalDeclType, finalDefaultValue) = _declDefaultPair
             term <- safeParseParameter(s"final ${finalDeclType} ${argName.escapeIdentifier}")
             dep = classDep.filterNot(_.asString == clsName) // Filter out our own class name
           } yield ProtocolParameter[JavaLanguage](term, name, dep, rawType, readOnlyKey, emptyToNull, dataRedaction, defaultValue)
@@ -827,15 +840,29 @@ object JacksonGenerator {
             case SwaggerUtil.Resolved(tpe, dep, default, _, _) => Target.pure(tpe)
             case SwaggerUtil.Deferred(tpeName) =>
               Target.fromOption(lookupTypeName(tpeName, concreteTypes)(Target.pure(_)), s"Unresolved reference ${tpeName}").flatten
-            case SwaggerUtil.DeferredArray(tpeName) =>
-              Target
-                .fromOption(lookupTypeName(tpeName, concreteTypes)(tpe => safeParseType(s"java.util.List<${tpe}>")), s"Unresolved reference ${tpeName}")
-                .flatten
-            case SwaggerUtil.DeferredMap(tpeName) =>
-              Target
-                .fromOption(lookupTypeName(tpeName, concreteTypes)(tpe => safeParseType(s"java.util.List<java.util.Map<String, ${tpe}>>")),
-                            s"Unresolved reference ${tpeName}")
-                .flatten
+            case SwaggerUtil.DeferredArray(tpeName, containerTpe) =>
+              for {
+                tpe <- containerTpe.fold(safeParseClassOrInterfaceType("java.util.List")) {
+                  case ci: ClassOrInterfaceType => Target.pure(ci)
+                  case t                        => Target.raiseError(s"Supplied type was not supported: ${t}")
+                }
+                res <- Target
+                  .fromOption(lookupTypeName(tpeName, concreteTypes)(t => Target.pure(tpe.setTypeArguments(t))), s"Unresolved reference ${tpeName}")
+                  .flatten
+              } yield res
+            case SwaggerUtil.DeferredMap(tpeName, containerTpe) =>
+              for {
+                tpe <- containerTpe.fold(safeParseClassOrInterfaceType("java.util.Map")) {
+                  case ci: ClassOrInterfaceType => Target.pure(ci)
+                  case t                        => Target.raiseError(s"Supplied type was not supported: ${t}")
+                }
+                res <- Target
+                  .fromOption(
+                    lookupTypeName(tpeName, concreteTypes)(t => safeParseType("java.util.List<${tpe}<String, ${t}>>")),
+                    s"Unresolved reference ${tpeName}"
+                  )
+                  .flatten
+              } yield res
           }
         } yield result
     }
@@ -853,8 +880,8 @@ object JacksonGenerator {
           "com.fasterxml.jackson.annotation.JsonProperty",
           "java.util.Optional"
         ).map(safeParseRawImport) ++ List(
-          "java.util.Objects.requireNonNull"
-        ).map(safeParseRawStaticImport)).sequence
+              "java.util.Objects.requireNonNull"
+            ).map(safeParseRawStaticImport)).sequence
 
       case PackageObjectImports() =>
         Target.pure(List.empty)
@@ -864,11 +891,13 @@ object JacksonGenerator {
     }
   }
 
-  private def renderSealedTrait(className: String,
-                                selfParams: List[ProtocolParameter[JavaLanguage]],
-                                discriminator: Discriminator[JavaLanguage],
-                                parents: List[SuperClass[JavaLanguage]],
-                                children: List[String]): Target[ClassOrInterfaceDeclaration] = {
+  private def renderSealedTrait(
+      className: String,
+      selfParams: List[ProtocolParameter[JavaLanguage]],
+      discriminator: Discriminator[JavaLanguage],
+      parents: List[SuperClass[JavaLanguage]],
+      children: List[String]
+  ): Target[ClassOrInterfaceDeclaration] = {
     val parentsWithDiscriminators = parents.collect({ case p if p.discriminators.nonEmpty => p })
     for {
       parentOpt <- (parentsWithDiscriminators, parents) match {
@@ -886,8 +915,8 @@ object JacksonGenerator {
       val (parentRequiredTerms, parentOptionalTerms) = sortParams(parentParams)
       val parentTerms                                = parentRequiredTerms ++ parentOptionalTerms
       val params = parents.filterNot(parent => parentOpt.contains(parent)).flatMap(_.params) ++ selfParams.filterNot(
-        param => parentParamNames.contains(param.term.getName.getIdentifier)
-      )
+              param => parentParamNames.contains(param.term.getName.getIdentifier)
+            )
       val (requiredTerms, optionalTerms) = sortParams(params)
       val terms                          = requiredTerms ++ optionalTerms
 
@@ -931,15 +960,17 @@ object JacksonGenerator {
                 new NormalAnnotationExpr(
                   new Name("JsonSubTypes.Type"),
                   new NodeList(
-                    new MemberValuePair("name",
-                                        new StringLiteralExpr(
-                                          discriminator.mapping
-                                            .collectFirst({ case (value, elem) if elem.name == child => value })
-                                            .getOrElse(child)
-                                        )),
+                    new MemberValuePair(
+                      "name",
+                      new StringLiteralExpr(
+                        discriminator.mapping
+                          .collectFirst({ case (value, elem) if elem.name == child => value })
+                          .getOrElse(child)
+                      )
+                    ),
                     new MemberValuePair("value", new ClassExpr(StaticJavaParser.parseType(child)))
                   )
-              )
+                )
             ): _*
           )
         )
@@ -995,12 +1026,11 @@ object JacksonGenerator {
             "com.fasterxml.jackson.annotation.JsonSubTypes",
             "com.fasterxml.jackson.annotation.JsonTypeInfo"
           ).traverse(safeParseRawImport)
-        } yield
-          StaticDefns[JavaLanguage](
-            clsName,
-            extraImports,
-            List.empty
-          )
+        } yield StaticDefns[JavaLanguage](
+          clsName,
+          extraImports,
+          List.empty
+        )
 
       case DecodeADT(clsName, discriminator, children) =>
         Target.pure(None)

@@ -64,11 +64,13 @@ object JavaGenerator {
       })
   }
 
-  def writeClientTree(pkgPath: Path,
-                      pkg: List[String],
-                      pkgDecl: PackageDeclaration,
-                      imports: List[ImportDeclaration],
-                      definition: BodyDeclaration[_ <: BodyDeclaration[_]]): Target[WriteTree] =
+  def writeClientTree(
+      pkgPath: Path,
+      pkg: List[String],
+      pkgDecl: PackageDeclaration,
+      imports: List[ImportDeclaration],
+      definition: BodyDeclaration[_ <: BodyDeclaration[_]]
+  ): Target[WriteTree] =
     definition match {
       case td: TypeDeclaration[_] =>
         val cu = new CompilationUnit()
@@ -80,11 +82,13 @@ object JavaGenerator {
         Target.raiseError(s"Class definition must be a TypeDeclaration but it is a ${other.getClass.getName}")
     }
 
-  def writeServerTree(pkgPath: Path,
-                      pkg: List[String],
-                      pkgDecl: PackageDeclaration,
-                      imports: List[ImportDeclaration],
-                      definition: BodyDeclaration[_ <: BodyDeclaration[_]]): Target[WriteTree] =
+  def writeServerTree(
+      pkgPath: Path,
+      pkg: List[String],
+      pkgDecl: PackageDeclaration,
+      imports: List[ImportDeclaration],
+      definition: BodyDeclaration[_ <: BodyDeclaration[_]]
+  ): Target[WriteTree] =
     definition match {
       case td: TypeDeclaration[_] =>
         val cu = new CompilationUnit()
@@ -110,24 +114,40 @@ object JavaGenerator {
       case LiftOptionalTerm(value) => buildMethodCall("java.util.Optional.ofNullable", Some(value))
       case EmptyOptionalTerm()     => buildMethodCall("java.util.Optional.empty")
       case EmptyArray() =>
-        Target.pure(
-          new ObjectCreationExpr(null,
-                                 StaticJavaParser
-                                   .parseClassOrInterfaceType("java.util.ArrayList")
-                                   .setTypeArguments(new NodeList[Type]),
-                                 new NodeList())
-        )
+        for {
+          cls <- safeParseClassOrInterfaceType("java.util.ArrayList")
+        } yield {
+          new ObjectCreationExpr(
+            null,
+            cls.setTypeArguments(new NodeList[Type]),
+            new NodeList()
+          )
+        }
       case EmptyMap() =>
         Target.pure(
-          new ObjectCreationExpr(null,
-                                 StaticJavaParser
-                                   .parseClassOrInterfaceType("java.util.HashMap")
-                                   .setTypeArguments(new NodeList[Type]),
-                                 new NodeList())
+          new ObjectCreationExpr(
+            null,
+            StaticJavaParser
+              .parseClassOrInterfaceType("java.util.HashMap")
+              .setTypeArguments(new NodeList[Type]),
+            new NodeList()
+          )
         )
-      case LiftVectorType(value)               => safeParseClassOrInterfaceType("java.util.List").map(_.setTypeArguments(new NodeList(value)))
-      case LiftVectorTerm(value)               => buildMethodCall("java.util.Collections.singletonList", Some(value))
-      case LiftMapType(value)                  => safeParseClassOrInterfaceType("java.util.Map").map(_.setTypeArguments(STRING_TYPE, value))
+      case LiftVectorType(value, customTpe) =>
+        customTpe
+          .fold[Target[ClassOrInterfaceType]](safeParseClassOrInterfaceType("java.util.List").map(identity))({
+            case t: ClassOrInterfaceType => Target.pure(t)
+            case x                       => Target.raiseError(s"Unsure how to map $x")
+          })
+          .map(_.setTypeArguments(new NodeList(value)))
+      case LiftVectorTerm(value) => buildMethodCall("java.util.Collections.singletonList", Some(value))
+      case LiftMapType(value, customTpe) =>
+        customTpe
+          .fold[Target[ClassOrInterfaceType]](safeParseClassOrInterfaceType("java.util.Map").map(identity))({
+            case t: ClassOrInterfaceType => Target.pure(t)
+            case x                       => Target.raiseError(s"Unsure how to map $x")
+          })
+          .map(_.setTypeArguments(STRING_TYPE, value))
       case FullyQualifyPackageName(rawPkgName) => Target.pure(rawPkgName)
       case LookupEnumDefaultValue(tpe, defaultValue, values) => {
         // FIXME: Is there a better way to do this? There's a gap of coverage here
@@ -141,21 +161,21 @@ object JavaGenerator {
         }
       }
       case FormatEnumName(enumValue) => Target.pure(enumValue.toSnakeCase.toUpperCase(Locale.US))
-      case EmbedArray(tpe) =>
+      case EmbedArray(tpe, containerTpe) =>
         tpe match {
           case SwaggerUtil.Deferred(tpe) =>
-            Target.pure(SwaggerUtil.DeferredArray(tpe))
-          case SwaggerUtil.DeferredArray(_) =>
+            Target.pure(SwaggerUtil.DeferredArray(tpe, containerTpe))
+          case SwaggerUtil.DeferredArray(_, _) =>
             Target.raiseError("FIXME: Got an Array of Arrays, currently not supported")
-          case SwaggerUtil.DeferredMap(_) =>
+          case SwaggerUtil.DeferredMap(_, _) =>
             Target.raiseError("FIXME: Got an Array of Maps, currently not supported")
         }
-      case EmbedMap(tpe) =>
+      case EmbedMap(tpe, containerTpe) =>
         tpe match {
-          case SwaggerUtil.Deferred(inner) => Target.pure(SwaggerUtil.DeferredMap(inner))
-          case SwaggerUtil.DeferredMap(_) =>
+          case SwaggerUtil.Deferred(inner) => Target.pure(SwaggerUtil.DeferredMap(inner, containerTpe))
+          case SwaggerUtil.DeferredMap(_, _) =>
             Target.raiseError("FIXME: Got a map of maps, currently not supported")
-          case SwaggerUtil.DeferredArray(_) =>
+          case SwaggerUtil.DeferredArray(_, _) =>
             Target.raiseError("FIXME: Got a map of arrays, currently not supported")
         }
       case ParseType(tpe) =>
@@ -232,7 +252,7 @@ object JavaGenerator {
       case IntegerType(format)       => safeParseType("java.math.BigInteger")
       case BooleanType(format)       => safeParseType("Boolean")
       case ArrayType(format)         => safeParseClassOrInterfaceType("java.util.List").map(_.setTypeArguments(new NodeList[Type](STRING_TYPE)))
-      case FallbackType(tpe, format) => safeParseType(tpe)
+      case FallbackType(tpe, format) => Target.fromOption(tpe, "Missing type").flatMap(safeParseType)
 
       case WidenTypeName(tpe)           => safeParseType(tpe.asString)
       case WidenTermSelect(value)       => Target.pure(value)
@@ -309,21 +329,22 @@ object JavaGenerator {
             case (name, cu) =>
               prettyPrintSource(cu).map(bytes => Option((name, bytes)))
           })
-        } yield
-          nameAndBytes.fold((List.empty[WriteTree], List.empty[Statement]))({
-            case (name, bytes) =>
-              (
-                List(WriteTree(resolveFile(outputPath)(dtoComponents).resolve(s"${name}.java"), bytes)),
-                List.empty[Statement]
-              )
-          })
+        } yield nameAndBytes.fold((List.empty[WriteTree], List.empty[Statement]))({
+          case (name, bytes) =>
+            (
+              List(WriteTree(resolveFile(outputPath)(dtoComponents).resolve(s"${name}.java"), bytes)),
+              List.empty[Statement]
+            )
+        })
 
-      case WriteClient(pkgPath,
-                       pkgName,
-                       customImports,
-                       frameworkImplicitName,
-                       dtoComponents,
-                       Client(pkg, clientName, imports, staticDefns, client, responseDefinitions)) =>
+      case WriteClient(
+          pkgPath,
+          pkgName,
+          customImports,
+          frameworkImplicitName,
+          dtoComponents,
+          Client(pkg, clientName, imports, staticDefns, client, responseDefinitions)
+          ) =>
         for {
           pkgDecl             <- buildPkgDecl(pkgName ++ pkg)
           commonImport        <- safeParseRawImport((pkgName :+ "*").mkString("."))
@@ -333,12 +354,14 @@ object JavaGenerator {
           trees <- (clientClasses ++ responseDefinitions).traverse(writeClientTree(pkgPath, pkg, pkgDecl, allImports, _))
         } yield trees
 
-      case WriteServer(pkgPath,
-                       pkgName,
-                       customImports,
-                       frameworkImplicitName,
-                       dtoComponents,
-                       Server(pkg, extraImports, handlerDefinition, serverDefinitions)) =>
+      case WriteServer(
+          pkgPath,
+          pkgName,
+          customImports,
+          frameworkImplicitName,
+          dtoComponents,
+          Server(pkg, extraImports, handlerDefinition, serverDefinitions)
+          ) =>
         for {
           pkgDecl <- buildPkgDecl(pkgName ++ pkg)
 

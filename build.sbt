@@ -15,9 +15,9 @@ val catsVersion          = "1.6.0"
 val catsEffectVersion    = "1.0.0"
 val circeVersion         = "0.12.1"
 val http4sVersion        = "0.20.0"
-val scalacheckVersion    = "1.14.2"
+val scalacheckVersion    = "1.14.3"
 val scalatestVersion     = "3.0.8"
-val javaparserVersion    = "3.15.5"
+val javaparserVersion    = "3.15.7"
 val endpointsVersion     = "0.8.0"
 val ahcVersion           = "2.8.1"
 val dropwizardVersion    = "1.3.9"
@@ -66,7 +66,9 @@ val exampleCases: List[ExampleCase] = List(
   ExampleCase(sampleResource("issues/issue351.yaml"), "issues.issue351"),
   ExampleCase(sampleResource("issues/issue357.yaml"), "issues.issue357"),
   ExampleCase(sampleResource("issues/issue364.yaml"), "issues.issue364").args("--dtoPackage", "some.thing"),
+  ExampleCase(sampleResource("issues/issue389.yaml"), "issues.issue389"),
   ExampleCase(sampleResource("issues/issue405.yaml"), "issues.issue405"),
+  ExampleCase(sampleResource("issues/issue440.yaml"), "issues.issue440"),
   ExampleCase(sampleResource("issues/issue455.yaml"), "issues.issue455"),
   ExampleCase(sampleResource("multipart-form-data.yaml"), "multipartFormData"),
   ExampleCase(sampleResource("petstore.json"), "examples").args("--import", "support.PositiveLong"),
@@ -213,7 +215,7 @@ lazy val codegen = (project in file("modules/codegen"))
     (name := "guardrail") +:
       codegenSettings,
     libraryDependencies ++= testDependencies ++ Seq(
-      "org.scalameta"               %% "scalameta"                    % "4.2.4",
+      "org.scalameta"               %% "scalameta"                    % "4.3.0",
       "com.github.javaparser"       % "javaparser-symbol-solver-core" % javaparserVersion,
       "org.eclipse.jdt"             % "org.eclipse.jdt.core"          % "3.19.0",
       "org.eclipse.platform"        % "org.eclipse.equinox.app"       % "1.3.600",
@@ -335,7 +337,7 @@ lazy val dropwizardSample = (project in file("modules/sample-dropwizard"))
       "org.scalatest"              %% "scalatest"              % scalatestVersion   % Test,
       "junit"                      %  "junit"                  % "4.12"             % Test,
       "com.novocode"               %  "junit-interface"        % "0.11"             % Test,
-      "org.mockito"                %% "mockito-scala"          % "1.2.0"            % Test,
+      "org.mockito"                %% "mockito-scala"          % "1.7.1"            % Test,
       "com.github.tomakehurst"     %  "wiremock"               % "1.57"             % Test,
       "io.dropwizard"              %  "dropwizard-testing"     % dropwizardVersion  % Test,
       "org.glassfish.jersey.test-framework.providers" % "jersey-test-framework-provider-grizzly2" % jerseyVersion % Test

@@ -96,9 +96,11 @@ object DropwizardServerGenerator {
       .orElse(parameters.bodyParams.map(_ => RouteMeta.ApplicationJson))
   }
 
-  private def getBestProduces(contentTypes: List[RouteMeta.ContentType],
-                              responses: List[ApiResponse],
-                              protocolElems: List[StrictProtocolElems[JavaLanguage]]): Option[RouteMeta.ContentType] = {
+  private def getBestProduces(
+      contentTypes: List[RouteMeta.ContentType],
+      responses: List[ApiResponse],
+      protocolElems: List[StrictProtocolElems[JavaLanguage]]
+  ): Option[RouteMeta.ContentType] = {
     val priorityOrder = NonEmptyList.of(
       RouteMeta.ApplicationJson,
       RouteMeta.TextPlain,
@@ -159,9 +161,11 @@ object DropwizardServerGenerator {
       } yield cls
     }
 
-  def generateResponseClass(superClassType: ClassOrInterfaceType,
-                            response: Response[JavaLanguage],
-                            errorEntityFallbackType: Option[Type]): Target[(ClassOrInterfaceDeclaration, BodyDeclaration[_ <: BodyDeclaration[_]])] = {
+  def generateResponseClass(
+      superClassType: ClassOrInterfaceType,
+      response: Response[JavaLanguage],
+      errorEntityFallbackType: Option[Type]
+  ): Target[(ClassOrInterfaceDeclaration, BodyDeclaration[_ <: BodyDeclaration[_]])] = {
     val clsName = response.statusCodeName.asString
     for {
       clsType <- safeParseClassOrInterfaceType(clsName)
@@ -340,17 +344,18 @@ object DropwizardServerGenerator {
                   .map(p => new SingleMemberAnnotationExpr(new Name("Produces"), new FieldAccessExpr(new NameExpr("MediaType"), p.toJaxRsAnnotationName)))
                   .foreach(method.addAnnotation)
 
-                def addParamAnnotations(param: ScalaParameter[JavaLanguage], annotationName: String): Parameter = {
-                  val parameter = param.param.clone()
-                  // NB: The order here is actually critical.  In the case where we're using multipart,
-                  // the @NotNull annotation *must* come before the @FormDataParam annotation.  See:
-                  // https://github.com/eclipse-ee4j/jersey/issues/3632
+                def addValidationAnnotations(parameter: Parameter, param: ScalaParameter[JavaLanguage]): Parameter = {
                   if (param.required) {
-                    parameter.addMarkerAnnotation("NotNull")
+                    // NB: The order here is actually critical.  In the case where we're using multipart,
+                    // the @NotNull annotation *must* come before the @FormDataParam annotation.  See:
+                    // https://github.com/eclipse-ee4j/jersey/issues/3632
+                    parameter.getAnnotations.add(0, new MarkerAnnotationExpr("NotNull"))
                   }
-                  parameter.addAnnotation(new SingleMemberAnnotationExpr(new Name(annotationName), new StringLiteralExpr(param.argName.value)))
                   parameter
                 }
+
+                def addParamAnnotation(parameter: Parameter, param: ScalaParameter[JavaLanguage], annotationName: String): Parameter =
+                  parameter.addAnnotation(new SingleMemberAnnotationExpr(new Name(annotationName), new StringLiteralExpr(param.argName.value)))
 
                 def boxParameterTypes(parameter: Parameter): Parameter = {
                   if (parameter.getType.isPrimitiveType) {
@@ -359,15 +364,24 @@ object DropwizardServerGenerator {
                   parameter
                 }
 
-                val methodParams: List[Parameter] = (List(
+                val annotatedMethodParams: List[Parameter] = List(
                   (parameters.pathParams, "PathParam"),
                   (parameters.headerParams, "HeaderParam"),
                   (parameters.queryStringParams, "QueryParam"),
                   (parameters.formParams, if (consumes.contains(RouteMeta.MultipartFormData)) "FormDataParam" else "FormParam")
                 ).flatMap({
                   case (params, annotationName) =>
-                    params.map(addParamAnnotations(_, annotationName))
-                }) ++ parameters.bodyParams.map(_.param)).map(boxParameterTypes)
+                    params.map({ param =>
+                      val parameter = param.param.clone()
+                      val annotated = addParamAnnotation(parameter, param, annotationName)
+                      addValidationAnnotations(annotated, param)
+                    })
+                })
+
+                val bareMethodParams: List[Parameter] = parameters.bodyParams.toList
+                  .map(param => addValidationAnnotations(param.param.clone(), param))
+
+                val methodParams = (annotatedMethodParams ++ bareMethodParams).map(boxParameterTypes)
 
                 methodParams.foreach(method.addParameter)
                 method.addParameter(
@@ -419,20 +433,24 @@ object DropwizardServerGenerator {
                                 new VariableDeclarator(
                                   RESPONSE_BUILDER_TYPE,
                                   "builder",
-                                  new MethodCallExpr(new NameExpr("Response"),
-                                                     "status",
-                                                     new NodeList[Expression](new MethodCallExpr(new NameExpr("result"), "getStatusCode")))
+                                  new MethodCallExpr(
+                                    new NameExpr("Response"),
+                                    "status",
+                                    new NodeList[Expression](new MethodCallExpr(new NameExpr("result"), "getStatusCode"))
+                                  )
                                 ),
                                 finalModifier
                               )
                             )
                           ) ++ entitySetterIfTree ++ List(
-                            new ExpressionStmt(
-                              new MethodCallExpr(new NameExpr("asyncResponse"),
-                                                 "resume",
-                                                 new NodeList[Expression](new MethodCallExpr(new NameExpr("builder"), "build")))
-                            )
-                          )
+                                new ExpressionStmt(
+                                  new MethodCallExpr(
+                                    new NameExpr("asyncResponse"),
+                                    "resume",
+                                    new NodeList[Expression](new MethodCallExpr(new NameExpr("builder"), "build"))
+                                  )
+                                )
+                              )
                         ).toNodeList
                       )
                     })({ _ =>
@@ -479,12 +497,14 @@ object DropwizardServerGenerator {
                                 new NameExpr("asyncResponse"),
                                 "resume",
                                 new NodeList[Expression](
-                                  new MethodCallExpr(new MethodCallExpr(
-                                                       new NameExpr("Response"),
-                                                       "status",
-                                                       new NodeList[Expression](new IntegerLiteralExpr(500))
-                                                     ),
-                                                     "build")
+                                  new MethodCallExpr(
+                                    new MethodCallExpr(
+                                      new NameExpr("Response"),
+                                      "status",
+                                      new NodeList[Expression](new IntegerLiteralExpr(500))
+                                    ),
+                                    "build"
+                                  )
                                 )
                               )
                             )
@@ -594,8 +614,10 @@ object DropwizardServerGenerator {
           def httpMethodAnnotation(name: String): SupportDefinition[JavaLanguage] = {
             val annotationDecl = new AnnotationDeclaration(new NodeList(publicModifier), name)
               .addAnnotation(
-                new SingleMemberAnnotationExpr(new Name("Target"),
-                                               new ArrayInitializerExpr(new NodeList(new FieldAccessExpr(new NameExpr("ElementType"), "METHOD"))))
+                new SingleMemberAnnotationExpr(
+                  new Name("Target"),
+                  new ArrayInitializerExpr(new NodeList(new FieldAccessExpr(new NameExpr("ElementType"), "METHOD")))
+                )
               )
               .addAnnotation(new SingleMemberAnnotationExpr(new Name("Retention"), new FieldAccessExpr(new NameExpr("RetentionPolicy"), "RUNTIME")))
               .addAnnotation(new SingleMemberAnnotationExpr(new Name("HttpMethod"), new StringLiteralExpr(name)))
@@ -612,8 +634,8 @@ object DropwizardServerGenerator {
 
       case RenderClass(className, handlerName, classAnnotations, combinedRouteTerms, extraRouteParams, responseDefinitions, supportDefinitions) =>
         safeParseSimpleName(className) >>
-          safeParseSimpleName(handlerName) >>
-          Target.pure(doRenderClass(className, classAnnotations, supportDefinitions, combinedRouteTerms) :: Nil)
+            safeParseSimpleName(handlerName) >>
+            Target.pure(doRenderClass(className, classAnnotations, supportDefinitions, combinedRouteTerms) :: Nil)
 
       case RenderHandler(handlerName, methodSigs, handlerDefinitions, responseDefinitions) =>
         val handlerClass = new ClassOrInterfaceDeclaration(new NodeList(publicModifier), true, handlerName)
@@ -622,10 +644,12 @@ object DropwizardServerGenerator {
     }
 
     // Lift this function out of RenderClass above to work around a 2.11.x compiler syntax bug
-    private def doRenderClass(className: String,
-                              classAnnotations: List[AnnotationExpr],
-                              supportDefinitions: List[BodyDeclaration[_ <: BodyDeclaration[_]]],
-                              combinedRouteTerms: List[Node]): ClassOrInterfaceDeclaration = {
+    private def doRenderClass(
+        className: String,
+        classAnnotations: List[AnnotationExpr],
+        supportDefinitions: List[BodyDeclaration[_ <: BodyDeclaration[_]]],
+        combinedRouteTerms: List[Node]
+    ): ClassOrInterfaceDeclaration = {
       val cls = new ClassOrInterfaceDeclaration(new NodeList(publicModifier), false, className)
       classAnnotations.foreach(cls.addAnnotation)
       sortDefinitions(supportDefinitions ++ combinedRouteTerms.collect({ case bd: BodyDeclaration[_] => bd }))

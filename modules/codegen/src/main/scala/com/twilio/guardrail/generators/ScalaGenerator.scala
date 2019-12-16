@@ -39,11 +39,11 @@ object ScalaGenerator {
       case LiftOptionalType(value)             => Target.pure(t"Option[${value}]")
       case LiftOptionalTerm(value)             => Target.pure(q"Option(${value})")
       case EmptyOptionalTerm()                 => Target.pure(q"None")
-      case EmptyArray()                        => Target.pure(q"IndexedSeq.empty")
+      case EmptyArray()                        => Target.pure(q"Vector.empty")
       case EmptyMap()                          => Target.pure(q"Map.empty")
-      case LiftVectorType(value)               => Target.pure(t"IndexedSeq[${value}]")
-      case LiftVectorTerm(value)               => Target.pure(q"IndexedSeq(${value})")
-      case LiftMapType(value)                  => Target.pure(t"Map[String, ${value}]")
+      case LiftVectorType(value, customTpe)    => Target.pure(t"${customTpe.getOrElse(t"Vector")}[${value}]")
+      case LiftVectorTerm(value)               => Target.pure(q"Vector(${value})")
+      case LiftMapType(value, customTpe)       => Target.pure(t"${customTpe.getOrElse(t"Map")}[String, ${value}]")
       case FullyQualifyPackageName(rawPkgName) => Target.pure("_root_" +: rawPkgName)
       case LookupEnumDefaultValue(tpe, defaultValue, values) => {
         // FIXME: Is there a better way to do this? There's a gap of coverage here
@@ -57,21 +57,21 @@ object ScalaGenerator {
         }
       }
       case FormatEnumName(enumValue) => Target.pure(enumValue.toPascalCase)
-      case EmbedArray(tpe) =>
+      case EmbedArray(tpe, containerTpe) =>
         tpe match {
           case SwaggerUtil.Deferred(tpe) =>
-            Target.pure(SwaggerUtil.DeferredArray(tpe))
-          case SwaggerUtil.DeferredArray(_) =>
+            Target.pure(SwaggerUtil.DeferredArray(tpe, containerTpe))
+          case SwaggerUtil.DeferredArray(_, _) =>
             Target.raiseError("FIXME: Got an Array of Arrays, currently not supported")
-          case SwaggerUtil.DeferredMap(_) =>
+          case SwaggerUtil.DeferredMap(_, _) =>
             Target.raiseError("FIXME: Got an Array of Maps, currently not supported")
         }
-      case EmbedMap(tpe) =>
+      case EmbedMap(tpe, containerTpe) =>
         (tpe match {
-          case SwaggerUtil.Deferred(inner) => Target.pure(SwaggerUtil.DeferredMap(inner))
-          case SwaggerUtil.DeferredMap(_) =>
+          case SwaggerUtil.Deferred(inner) => Target.pure(SwaggerUtil.DeferredMap(inner, containerTpe))
+          case SwaggerUtil.DeferredMap(_, _) =>
             Target.raiseError("FIXME: Got a map of maps, currently not supported")
-          case SwaggerUtil.DeferredArray(_) =>
+          case SwaggerUtil.DeferredArray(_, _) =>
             Target.raiseError("FIXME: Got a map of arrays, currently not supported")
         })
       case ParseType(tpe) =>
@@ -144,7 +144,7 @@ object ScalaGenerator {
       case IntegerType(format)       => Target.pure(t"BigInt")
       case BooleanType(format)       => Target.pure(t"Boolean")
       case ArrayType(format)         => Target.pure(t"Iterable[String]")
-      case FallbackType(tpe, format) => Target.pure(Type.Name(tpe))
+      case FallbackType(tpe, format) => Target.fromOption(tpe, "Missing type").map(Type.Name(_))
 
       case WidenTypeName(tpe)           => Target.pure(tpe)
       case WidenTermSelect(value)       => Target.pure(value)
@@ -311,10 +311,11 @@ object ScalaGenerator {
       case WriteProtocolDefinition(outputPath, pkgName, definitions, dtoComponents, imports, elem) =>
         Target.pure(elem match {
           case EnumDefinition(_, _, _, _, cls, staticDefns) =>
-            (List(
-               WriteTree(
-                 resolveFile(outputPath)(dtoComponents).resolve(s"${cls.name.value}.scala"),
-                 sourceToBytes(source"""
+            (
+              List(
+                WriteTree(
+                  resolveFile(outputPath)(dtoComponents).resolve(s"${cls.name.value}.scala"),
+                  sourceToBytes(source"""
               package ${buildPkgTerm(dtoComponents)}
                 import ${buildPkgTerm(List("_root_") ++ pkgName ++ List("Implicits"))}._;
                 ..${imports}
@@ -322,24 +323,27 @@ object ScalaGenerator {
                 $cls
                 ${companionForStaticDefns(staticDefns)}
               """)
-               )
-             ),
-             List.empty[Stat])
+                )
+              ),
+              List.empty[Stat]
+            )
 
           case ClassDefinition(_, _, _, cls, staticDefns, _) =>
-            (List(
-               WriteTree(
-                 resolveFile(outputPath)(dtoComponents).resolve(s"${cls.name.value}.scala"),
-                 sourceToBytes(source"""
+            (
+              List(
+                WriteTree(
+                  resolveFile(outputPath)(dtoComponents).resolve(s"${cls.name.value}.scala"),
+                  sourceToBytes(source"""
               package ${buildPkgTerm(dtoComponents)}
                 ..${imports}
                 import ${buildPkgTerm(List("_root_") ++ pkgName ++ List("Implicits"))}._;
                 $cls
                 ${companionForStaticDefns(staticDefns)}
               """)
-               )
-             ),
-             List.empty[Stat])
+                )
+              ),
+              List.empty[Stat]
+            )
 
           case ADT(name, tpe, _, trt, staticDefns) =>
             val polyImports: Import = q"""import cats.syntax.either._"""
@@ -364,12 +368,14 @@ object ScalaGenerator {
           case RandomType(_, _) =>
             (List.empty, List.empty)
         })
-      case WriteClient(pkgPath,
-                       pkgName,
-                       customImports,
-                       frameworkImplicitName,
-                       dtoComponents,
-                       Client(pkg, clientName, imports, staticDefns, client, responseDefinitions)) =>
+      case WriteClient(
+          pkgPath,
+          pkgName,
+          customImports,
+          frameworkImplicitName,
+          dtoComponents,
+          Client(pkg, clientName, imports, staticDefns, client, responseDefinitions)
+          ) =>
         Target.pure(
           List(
             WriteTree(
@@ -388,12 +394,14 @@ object ScalaGenerator {
             )
           )
         )
-      case WriteServer(pkgPath,
-                       pkgName,
-                       customImports,
-                       frameworkImplicitName,
-                       dtoComponents,
-                       Server(pkg, extraImports, handlerDefinition, serverDefinitions)) =>
+      case WriteServer(
+          pkgPath,
+          pkgName,
+          customImports,
+          frameworkImplicitName,
+          dtoComponents,
+          Server(pkg, extraImports, handlerDefinition, serverDefinitions)
+          ) =>
         Target.pure(
           List(
             WriteTree(
