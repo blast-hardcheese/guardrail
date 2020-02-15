@@ -11,14 +11,14 @@ git.useGitDescribe := true
 crossScalaVersions in ThisBuild := Seq("2.12.10")
 
 val akkaVersion          = "10.0.14"
-val catsVersion          = "1.6.0"
-val catsEffectVersion    = "1.0.0"
-val circeVersion         = "0.12.1"
-val http4sVersion        = "0.20.0"
+val catsVersion          = "2.1.0"
+val catsEffectVersion    = "2.1.1"
+val circeVersion         = "0.13.0"
+val http4sVersion        = "0.21.0"
 val scalacheckVersion    = "1.14.3"
 val scalatestVersion     = "3.1.0"
 val scalatestPlusVersion = "3.1.0.0-RC2"
-val javaparserVersion    = "3.15.9"
+val javaparserVersion    = "3.15.12"
 val endpointsVersion     = "0.8.0"
 val ahcVersion           = "2.8.1"
 val dropwizardVersion    = "1.3.9"
@@ -74,7 +74,7 @@ val exampleCases: List[ExampleCase] = List(
   ExampleCase(sampleResource("issues/issue455.yaml"), "issues.issue455"),
   ExampleCase(sampleResource("multipart-form-data.yaml"), "multipartFormData"),
   ExampleCase(sampleResource("petstore.json"), "examples").args("--import", "support.PositiveLong"),
-  ExampleCase(sampleResource("petstore-openapi-3.0.2.yaml"), "examples.petstore.openapi302").args("--import", "support.PositiveLong"),
+  // ExampleCase(sampleResource("petstore-openapi-3.0.2.yaml"), "examples.petstore.openapi302").args("--import", "support.PositiveLong"),
   ExampleCase(sampleResource("plain.json"), "tests.dtos"),
   ExampleCase(sampleResource("polymorphism.yaml"), "polymorphism"),
   ExampleCase(sampleResource("polymorphism-mapped.yaml"), "polymorphismMapped"),
@@ -86,6 +86,7 @@ val exampleCases: List[ExampleCase] = List(
   ExampleCase(sampleResource("pathological-parameters.yaml"), "pathological"),
   ExampleCase(sampleResource("response-headers.yaml"), "responseHeaders"),
   ExampleCase(sampleResource("binary.yaml"), "binary").frameworks(Set("http4s")),
+  ExampleCase(sampleResource("conflicting-names.yaml"), "conflictingNames")
 )
 
 val exampleFrameworkSuites = Map(
