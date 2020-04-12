@@ -2,24 +2,14 @@ package com.twilio.guardrail.generators.syntax
 
 import cats.implicits._
 import com.github.javaparser.StaticJavaParser
-import com.github.javaparser.ast.`type`.{ ClassOrInterfaceType, PrimitiveType, Type }
+import com.github.javaparser.ast.`type`.{ ClassOrInterfaceType, Type }
 import com.github.javaparser.ast.body._
 import com.github.javaparser.ast.comments.{ BlockComment, Comment }
-import com.github.javaparser.ast.expr.{
-  ClassExpr,
-  Expression,
-  FieldAccessExpr,
-  LiteralStringValueExpr,
-  MethodCallExpr,
-  Name,
-  NameExpr,
-  SimpleName,
-  StringLiteralExpr,
-  ThisExpr
-}
+import com.github.javaparser.ast.expr._
 import com.github.javaparser.ast.nodeTypes.{ NodeWithName, NodeWithSimpleName }
 import com.github.javaparser.ast.{ CompilationUnit, ImportDeclaration, Node, NodeList }
 import com.twilio.guardrail.languages.JavaLanguage
+import com.twilio.guardrail.languages.JavaLanguage.JavaTypeName
 import com.twilio.guardrail.{ SupportDefinition, Target }
 import scala.collection.JavaConverters._
 import scala.compat.java8.OptionConverters._
@@ -27,7 +17,7 @@ import scala.reflect.ClassTag
 import scala.util.{ Failure, Success, Try }
 
 object Java {
-  implicit class RichType(val tpe: Type) extends AnyVal {
+  implicit class RichType(private val tpe: Type) extends AnyVal {
     def isOptional: Boolean =
       tpe match {
         case cls: ClassOrInterfaceType =>
@@ -53,24 +43,18 @@ object Java {
         case cls: ClassOrInterfaceType if name.contains(".") =>
           (cls.getScope.asScala.fold("")(_.getName.asString + ".") + cls.getNameAsString) == name
         case cls: ClassOrInterfaceType => cls.getNameAsString == name
-        case pt: PrimitiveType         => pt.asString == name
-        case _                         => false
+        case other                     => other.asString == name
       }
 
-    def name: Option[String] =
-      tpe match {
-        case cls: ClassOrInterfaceType =>
-          Some(cls.getScope.asScala.fold("")(_.getName.asString + ".") + cls.getNameAsString)
-        case pt: PrimitiveType => Option(pt.asString)
-        case _                 => None
-      }
+    @deprecated("Just use Type#asString", "0.0.0")
+    def name: Option[String] = Option(tpe.asString)
   }
 
-  implicit class RichListOfNode[T <: Node](val l: List[T]) extends AnyVal {
+  implicit class RichListOfNode[T <: Node](private val l: List[T]) extends AnyVal {
     def toNodeList: NodeList[T] = new NodeList[T](l: _*)
   }
 
-  implicit class RichNodeList[T <: Node](val nl: NodeList[T]) extends AnyVal {
+  implicit class RichNodeList[T <: Node](private val nl: NodeList[T]) extends AnyVal {
     def toList(implicit cls: ClassTag[T]): List[T] = nl.iterator.asScala.toList
   }
 
@@ -118,7 +102,7 @@ object Java {
     Target.log.function(s"${log}: ${s}") {
       Try(parser(s)) match {
         case Success(value) => Target.pure(value)
-        case Failure(t)     => Target.raiseError(formatException(s"Unable to parse '${s}' to a ${cls.runtimeClass.getName}")(t))
+        case Failure(t)     => Target.raiseUserError(formatException(s"Unable to parse '${s}' to a ${cls.runtimeClass.getName}")(t))
       }
     }
 
@@ -126,6 +110,7 @@ object Java {
   def safeParseSimpleName(s: String): Target[SimpleName] = safeParse("safeParseSimpleName")(StaticJavaParser.parseSimpleName, s)
   def safeParseName(s: String): Target[Name]             = safeParse("safeParseName")(StaticJavaParser.parseName, s)
   def safeParseType(s: String): Target[Type]             = safeParse("safeParseType")(StaticJavaParser.parseType, s)
+  def safeParseTypeName(s: String): Target[JavaTypeName] = safeParse("safeParseTypeName")(s => JavaTypeName(StaticJavaParser.parseType(s)), s)
   def safeParseClassOrInterfaceType(s: String): Target[ClassOrInterfaceType] =
     safeParse("safeParseClassOrInterfaceType")(StaticJavaParser.parseClassOrInterfaceType, s)
   def safeParseExpression[T <: Expression](s: String)(implicit cls: ClassTag[T]): Target[T] =
@@ -245,7 +230,7 @@ object Java {
     "while"
   )
 
-  implicit class RichJavaString(val s: String) extends AnyVal {
+  implicit class RichJavaString(private val s: String) extends AnyVal {
     def escapeReservedWord: String = if (reservedWords.contains(s)) s + "_" else s
     def unescapeReservedWord: String =
       if (s.endsWith("_")) {
@@ -309,13 +294,13 @@ object Java {
   def loadSupportDefinitionFromString(className: String, source: String): Target[SupportDefinition[JavaLanguage]] =
     Try(StaticJavaParser.parse(source)) match {
       case Failure(t) =>
-        Target.raiseError[SupportDefinition[JavaLanguage]](s"Failed to parse class ${className} from string: $t")
+        Target.raiseUserError[SupportDefinition[JavaLanguage]](s"Failed to parse class ${className} from string: $t")
       case Success(cu) =>
         cu.getClassByName(className)
           .asScala
           .orElse(cu.getInterfaceByName(className).asScala)
           .fold(
-            Target.raiseError[SupportDefinition[JavaLanguage]](s"Unable to find class ${className} in parsed string")
+            Target.raiseUserError[SupportDefinition[JavaLanguage]](s"Unable to find class ${className} in parsed string")
           )(
             clsDef =>
               Target.pure(

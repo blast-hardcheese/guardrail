@@ -12,8 +12,6 @@ import cats.arrow.FunctionK
 import cats.data.NonEmptyList
 
 object JavaModule extends AbstractModule[JavaLanguage] {
-  implicit val coreTargetMonad: cats.Monad[CoreTarget] = cats.data.EitherT.catsDataMonadErrorForEitherT[cats.Id, Error]
-
   def jackson: FunctionK[ModelInterpreters[JavaLanguage, ?], Target] = {
     val interpDefinitionPM
         : FunctionK[DefinitionPM[JavaLanguage, ?], Target]                         = JacksonGenerator.ProtocolSupportTermInterp or JacksonGenerator.ModelProtocolTermInterp
@@ -26,7 +24,7 @@ object JavaModule extends AbstractModule[JavaLanguage] {
   def dropwizard: FunctionK[ServerTerm[JavaLanguage, ?], Target]      = DropwizardServerGenerator.ServerTermInterp
   def asyncHttpClient: FunctionK[ClientTerm[JavaLanguage, ?], Target] = AsyncHttpClientClientGenerator.ClientTermInterp
 
-  def extract(modules: NonEmptyList[String]): CoreTarget[FunctionK[CodegenApplication[JavaLanguage, ?], Target]] =
+  def extract(modules: NonEmptyList[String]): Target[FunctionK[CodegenApplication[JavaLanguage, ?], Target]] =
     (for {
       protocolGenerator <- popModule("json", ("jackson", jackson))
       clientGenerator   <- popModule("client", ("async-http-client", asyncHttpClient))

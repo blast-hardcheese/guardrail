@@ -5,7 +5,7 @@ import cats.data.NonEmptyList
 import cats.implicits._
 import cats.~>
 import com.twilio.guardrail.core.CoreTermInterp
-import com.twilio.guardrail.terms.{ CoreTerm, CoreTerms }
+import com.twilio.guardrail.terms.CoreTerms
 import com.twilio.swagger.core.{ LogLevel, LogLevels, StructuredLogger }
 import com.twilio.guardrail.languages.{ JavaLanguage, LA, ScalaLanguage }
 import scala.io.AnsiColor
@@ -51,8 +51,8 @@ object CLICommon {
 }
 
 trait CLICommon {
-  def scalaInterpreter: CoreTerm[ScalaLanguage, ?] ~> CoreTarget
-  def javaInterpreter: CoreTerm[JavaLanguage, ?] ~> CoreTarget
+  implicit def scalaInterpreter: CoreTerms[ScalaLanguage, Target]
+  implicit def javaInterpreter: CoreTerms[JavaLanguage, Target]
 
   def processArgs(args: Array[String]): CommandLineResult = {
     val (language, strippedArgs) = args.partition(handleLanguage.isDefinedAt _)
@@ -69,8 +69,8 @@ trait CLICommon {
     case "scala" => run("scala", _)(scalaInterpreter)
   }
 
-  def run[L <: LA](language: String, args: Array[String])(interpreter: CoreTerm[L, ?] ~> CoreTarget): CommandLineResult = {
-    val C = CoreTerms.coreTerm[L, CoreTerm[L, ?]]
+  def run[L <: LA](language: String, args: Array[String])(interpreter: CoreTerms[L, Target]): CommandLineResult = {
+    val C = CoreTerms.coreTerm[L, Target](interpreter)
     // Hacky loglevel parsing, only supports levels that come before absolutely
     // every other argument due to arguments being a small configuration
     // language themselves.
@@ -84,19 +84,18 @@ trait CLICommon {
     // code is included into all other build tools.
     val coreArgs = C.parseArgs(newArgs).map(NonEmptyList.fromList(_))
 
-    val result = coreArgs
-      .foldMap(interpreter)
-      .flatMap({ args =>
-        guardrailRunner(args.map(language -> _).toMap)
-      })
-
     implicit val logLevel: LogLevel = level
       .flatMap(level => LogLevels.members.find(_.level == level.toLowerCase))
       .getOrElse(LogLevels.Warning)
 
+    val result = coreArgs
+      .flatMap({ args =>
+        guardrailRunner(args.map(language -> _).toMap)
+      })
+
     val fallback = List.empty[Path]
     import CLICommon.unsafePrintHelp
-    val /*(logger,*/ paths /*)*/ = result
+    val paths = result
       .fold(
         {
           case MissingArg(args, Error.ArgName(arg)) =>
@@ -144,7 +143,7 @@ trait CLICommon {
         identity
       )
 
-    // println(logger.show)
+    println(result.logEntries.show)
 
     if (paths.isEmpty) {
       CommandLineResult.failure
@@ -155,24 +154,20 @@ trait CLICommon {
 
   def runLanguages(
       tasks: Map[String, NonEmptyList[Args]]
-  ): CoreTarget[List[ReadSwagger[Target[List[WriteTree]]]]] =
-    tasks.toList.flatTraverse[CoreTarget, ReadSwagger[Target[List[WriteTree]]]]({
+  ): Target[List[ReadSwagger[Target[List[WriteTree]]]]] =
+    tasks.toList.flatTraverse[Target, ReadSwagger[Target[List[WriteTree]]]]({
       case (language, args) =>
         (language match {
           case "java" =>
-            Common
-              .runM[JavaLanguage, CoreTerm[JavaLanguage, ?]](args)
-              .foldMap(javaInterpreter)
+            Common.runM[JavaLanguage, Target](args)
           case "scala" =>
-            Common
-              .runM[ScalaLanguage, CoreTerm[ScalaLanguage, ?]](args)
-              .foldMap(scalaInterpreter)
+            Common.runM[ScalaLanguage, Target](args)
           case other =>
-            CoreTarget.raiseError(UnparseableArgument("language", other))
+            Target.raiseError(UnparseableArgument("language", other))
         }).map(_.toList)
     })
 
-  def guardrailRunner: Map[String, NonEmptyList[Args]] => CoreTarget[List[java.nio.file.Path]] = { tasks =>
+  def guardrailRunner: Map[String, NonEmptyList[Args]] => Target[List[java.nio.file.Path]] = { tasks =>
     runLanguages(tasks)
       .flatMap(
         _.flatTraverse(
@@ -182,12 +177,9 @@ trait CLICommon {
               .map(_.map(WriteTree.unsafeWriteTree))
               .leftFlatMap(
                 value =>
-                  Target
-                    .pushLogger(StructuredLogger.error(s"${AnsiColor.RED}Error in ${rs.path}${AnsiColor.RESET}"))
-                    .toEitherT
-                    .subflatMap(_ => Either.left[Error, List[Path]](value))
+                  Target.pushLogger(StructuredLogger.error(s"${AnsiColor.RED}Error in ${rs.path}${AnsiColor.RESET}")) *> Target.raiseError[List[Path]](value)
               )
-              <* Target.pushLogger(StructuredLogger.reset).toEitherT
+              .productL(Target.pushLogger(StructuredLogger.reset))
         )
       )
       .map(_.distinct)
@@ -198,7 +190,7 @@ object CLI extends CLICommon {
   import com.twilio.guardrail.generators.{ AkkaHttp, Endpoints, Http4s }
   import com.twilio.guardrail.generators.{ Java, JavaModule, ScalaModule }
   import scala.meta._
-  val scalaInterpreter = CoreTermInterp[ScalaLanguage](
+  val scalaInterpreter = new CoreTermInterp[ScalaLanguage](
     "akka-http",
     ScalaModule.extract, {
       case "akka-http" => AkkaHttp
@@ -209,7 +201,7 @@ object CLI extends CLICommon {
     }
   )
 
-  val javaInterpreter = CoreTermInterp[JavaLanguage](
+  val javaInterpreter = new CoreTermInterp[JavaLanguage](
     "dropwizard",
     JavaModule.extract, {
       case "dropwizard" => Java.Dropwizard

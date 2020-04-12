@@ -1,3 +1,5 @@
+import complete.DefaultParsers._
+
 val projectName = "guardrail-root"
 name := projectName
 organization in ThisBuild := "com.twilio"
@@ -8,24 +10,24 @@ licenses in ThisBuild += ("MIT", url("http://opensource.org/licenses/MIT"))
 enablePlugins(GitVersioning)
 git.useGitDescribe := true
 
-crossScalaVersions in ThisBuild := Seq("2.12.10")
+crossScalaVersions in ThisBuild := Seq("2.12.11")
 
 val akkaVersion          = "10.0.14"
-val catsVersion          = "2.1.0"
-val catsEffectVersion    = "2.1.1"
+val catsVersion          = "2.1.1"
+val catsEffectVersion    = "2.1.2"
 val circeVersion         = "0.13.0"
-val http4sVersion        = "0.21.0"
+val http4sVersion        = "0.21.3"
 val scalacheckVersion    = "1.14.3"
-val scalatestVersion     = "3.1.0"
+val scalatestVersion     = "3.1.1"
 val scalatestPlusVersion = "3.1.0.0-RC2"
-val javaparserVersion    = "3.15.12"
+val javaparserVersion    = "3.15.17"
 val endpointsVersion     = "0.8.0"
 val ahcVersion           = "2.8.1"
 val dropwizardVersion    = "1.3.9"
 val jerseyVersion        = "2.25.1"
 val kindProjectorVersion = "0.10.3"
 val jaxbApiVersion       = "2.2.11"
-val springBootVersion    = "2.2.1.RELEASE"
+val springBootVersion    = "2.2.3.RELEASE"
 
 mainClass in assembly := Some("com.twilio.guardrail.CLI")
 assemblyMergeStrategy in assembly := {
@@ -41,11 +43,29 @@ assemblyMergeStrategy in assembly := {
 
 import scoverage.ScoverageKeys
 
+val exampleFrameworkSuites = Map(
+  "scala" -> List(
+    ("akka-http", "akkaHttp", List("client", "server")),
+    ("endpoints", "endpoints", List("client")),
+    ("http4s", "http4s", List("client", "server"))
+  ),
+  "java" -> List(
+    ("dropwizard", "dropwizard", List("client", "server")),
+    ("spring-mvc", "springMvc", List("server"))
+  )
+)
+
+
+val scalaFrameworks = exampleFrameworkSuites("scala").map(_._2)
+val javaFrameworks = exampleFrameworkSuites("java").map(_._2)
+
 import com.twilio.guardrail.sbt.ExampleCase
 def sampleResource(name: String): java.io.File = file(s"modules/sample/src/main/resources/${name}")
 val exampleCases: List[ExampleCase] = List(
   ExampleCase(sampleResource("additional-properties.yaml"), "additionalProperties"),
   ExampleCase(sampleResource("alias.yaml"), "alias"),
+  ExampleCase(sampleResource("char-encoding/char-encoding-request-stream.yaml"), "charEncoding.requestStream").frameworks(Set("dropwizard")),
+  ExampleCase(sampleResource("char-encoding/char-encoding-response-stream.yaml"), "charEncoding.responseStream").frameworks(Set("dropwizard")),
   ExampleCase(sampleResource("contentType-textPlain.yaml"), "tests.contentTypes.textPlain"),
   ExampleCase(sampleResource("custom-header-type.yaml"), "tests.customTypes.customHeader"),
   ExampleCase(sampleResource("date-time.yaml"), "dateTime"),
@@ -79,34 +99,24 @@ val exampleCases: List[ExampleCase] = List(
   ExampleCase(sampleResource("plain.json"), "tests.dtos"),
   ExampleCase(sampleResource("polymorphism.yaml"), "polymorphism"),
   ExampleCase(sampleResource("polymorphism-mapped.yaml"), "polymorphismMapped"),
-  ExampleCase(sampleResource("polymorphism-nested.yaml"), "polymorphismNested").frameworks(Set("akka-http", "endpoints", "http4s")),
+  ExampleCase(sampleResource("polymorphism-nested.yaml"), "polymorphismNested").frameworks(scalaFrameworks.toSet),
   ExampleCase(sampleResource("raw-response.yaml"), "raw"),
   ExampleCase(sampleResource("redaction.yaml"), "redaction"),
   ExampleCase(sampleResource("server1.yaml"), "tracer").args("--tracing"),
   ExampleCase(sampleResource("server2.yaml"), "tracer").args("--tracing"),
   ExampleCase(sampleResource("pathological-parameters.yaml"), "pathological"),
   ExampleCase(sampleResource("response-headers.yaml"), "responseHeaders"),
-  ExampleCase(sampleResource("binary.yaml"), "binary").frameworks(Set("http4s")),
-  ExampleCase(sampleResource("conflicting-names.yaml"), "conflictingNames")
+  ExampleCase(sampleResource("random-content-types.yaml"), "randomContentTypes").frameworks(Set("dropwizard", "http4s")),
+  ExampleCase(sampleResource("binary.yaml"), "binary").frameworks(Set("dropwizard", "http4s")),
+  ExampleCase(sampleResource("conflicting-names.yaml"), "conflictingNames"),
+  ExampleCase(sampleResource("base64.yaml"), "base64").frameworks(scalaFrameworks.toSet),
 )
 
-val exampleFrameworkSuites = Map(
-  "scala" -> List(
-    ("akka-http", "akkaHttp", List("client", "server")),
-    ("endpoints", "endpoints", List("client")),
-    ("http4s", "http4s", List("client", "server"))
-  ),
-  "java" -> List(
-    ("dropwizard", "dropwizard", List("client", "server")),
-    ("spring-mvc", "springMvc", List("server"))
-  )
-)
-
-def exampleArgs(language: String): List[List[String]] = exampleCases
+def exampleArgs(language: String, framework: Option[String] = None): List[List[String]] = exampleCases
   .foldLeft(List[List[String]](List(language)))({
     case (acc, ExampleCase(path, prefix, extra, onlyFrameworks)) =>
       acc ++ (for {
-        frameworkSuite <- exampleFrameworkSuites(language)
+        frameworkSuite <- exampleFrameworkSuites(language).filter(efs => framework.forall(_ == efs._1))
         (frameworkName, frameworkPackage, kinds) = frameworkSuite
         if onlyFrameworks.forall(_.contains(frameworkName))
         kind <- kinds
@@ -137,15 +147,23 @@ fullRunTask(
   exampleArgs("scala").flatten.filter(_.nonEmpty): _*
 )
 
+lazy val runExample: InputKey[Unit] = inputKey[Unit]("Run generators with example args (usage: runExample [language] [framework])")
+runExample := Def.inputTaskDyn {
+  val args: Seq[String] = spaceDelimited("<arg>").parsed
+  val runArgs = args match {
+    case language :: framework :: Nil => exampleArgs(language, Some(framework))
+    case language :: Nil => exampleArgs(language)
+    case Nil => exampleArgs("scala") ++ exampleArgs("java")
+  }
+  runTask(Test, "com.twilio.guardrail.CLI", runArgs.flatten.filter(_.nonEmpty): _*)
+}.evaluated
+
 artifact in (Compile, assembly) := {
   (artifact in (Compile, assembly)).value
     .withClassifier(Option("assembly"))
 }
 
 addArtifact(artifact in (Compile, assembly), assembly)
-
-val scalaFrameworks = exampleFrameworkSuites("scala").map(_._2)
-val javaFrameworks = exampleFrameworkSuites("java").map(_._2)
 
 addCommandAlias("resetSample", "; " ++ (scalaFrameworks ++ javaFrameworks).map(x => s"${x}Sample/clean").mkString(" ; "))
 
@@ -180,6 +198,8 @@ addCommandAlias(
 
 resolvers += Resolver.sonatypeRepo("releases")
 addCompilerPlugin("org.typelevel" % "kind-projector"  % kindProjectorVersion cross CrossVersion.binary)
+addCompilerPlugin(scalafixSemanticdb)
+scalacOptions += "-Yrangepos"
 
 publishMavenStyle := true
 
@@ -194,11 +214,13 @@ val codegenSettings = Seq(
   ScoverageKeys.coverageMinimum := 19.9,
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
   addCompilerPlugin("org.typelevel" %% "kind-projector" % kindProjectorVersion),
+  addCompilerPlugin(scalafixSemanticdb),
   wartremoverWarnings in Compile ++= Warts.unsafe.filterNot(w => excludedWarts.exists(_.clazz == w.clazz)),
   wartremoverWarnings in Test := List.empty,
   scalacOptions in ThisBuild ++= Seq(
     "-Ypartial-unification",
     "-Ydelambdafy:method",
+    "-Yrangepos",
     // "-Ywarn-unused-import",  // TODO: Enable this! https://github.com/twilio/guardrail/pull/282
     "-feature",
     "-unchecked",
@@ -225,11 +247,11 @@ lazy val codegen = (project in file("modules/codegen"))
     (name := "guardrail") +:
       codegenSettings,
     libraryDependencies ++= testDependencies ++ Seq(
-      "org.scalameta"               %% "scalameta"                    % "4.3.0",
+      "org.scalameta"               %% "scalameta"                    % "4.3.7",
       "com.github.javaparser"       % "javaparser-symbol-solver-core" % javaparserVersion,
       "org.eclipse.jdt"             % "org.eclipse.jdt.core"          % "3.19.0",
       "org.eclipse.platform"        % "org.eclipse.equinox.app"       % "1.3.600",
-      "io.swagger.parser.v3"        % "swagger-parser"                % "2.0.17",
+      "io.swagger.parser.v3"        % "swagger-parser"                % "2.0.19",
       "org.tpolecat"                %% "atto-core"                    % "0.6.3",
       "org.typelevel"               %% "cats-core"                    % catsVersion,
       "org.typelevel"               %% "cats-kernel"                  % catsVersion,
@@ -347,7 +369,7 @@ lazy val dropwizardSample = (project in file("modules/sample-dropwizard"))
       "org.scalatest"              %% "scalatest"              % scalatestVersion   % Test,
       "junit"                      %  "junit"                  % "4.12"             % Test,
       "com.novocode"               %  "junit-interface"        % "0.11"             % Test,
-      "org.mockito"                %% "mockito-scala"          % "1.7.1"            % Test,
+      "org.mockito"                %% "mockito-scala"          % "1.12.0"           % Test,
       "com.github.tomakehurst"     %  "wiremock"               % "1.57"             % Test,
       "io.dropwizard"              %  "dropwizard-testing"     % dropwizardVersion  % Test,
       "org.glassfish.jersey.test-framework.providers" % "jersey-test-framework-provider-grizzly2" % jerseyVersion % Test
@@ -369,7 +391,7 @@ lazy val springMvcSample = (project in file("modules/sample-springMvc"))
       "org.springframework.boot"   %  "spring-boot-starter-web"  % springBootVersion,
       "org.scala-lang.modules"     %% "scala-java8-compat"       % "0.9.0"            % Test,
       "org.scalatest"              %% "scalatest"                % scalatestVersion   % Test,
-      "org.mockito"                %% "mockito-scala"            % "1.7.1"            % Test,
+      "org.mockito"                %% "mockito-scala"            % "1.12.0"           % Test,
       "org.springframework.boot"   %  "spring-boot-starter-test" % springBootVersion  % Test,
     ),
     unmanagedSourceDirectories in Compile += baseDirectory.value / "target" / "generated",

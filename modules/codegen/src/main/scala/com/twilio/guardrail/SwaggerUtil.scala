@@ -31,7 +31,7 @@ object SwaggerUtil {
   object ResolvedType {
     def resolveReferences[L <: LA, F[_]](
         values: List[(String, ResolvedType[L])]
-    )(implicit Sc: ScalaTerms[L, F], Sw: SwaggerTerms[L, F]): Free[F, List[(String, Resolved[L])]] = Sw.log.function("resolveReferences") {
+    )(implicit Sc: ScalaTerms[L, Free[F, ?]], Sw: SwaggerTerms[L, F]): Free[F, List[(String, Resolved[L])]] = Sw.log.function("resolveReferences") {
       import Sc._
       import Sw._
       val (lazyTypes, resolvedTypes) = Foldable[List].partitionEither(values) {
@@ -55,34 +55,19 @@ object SwaggerUtil {
             if (lazyTypes.isEmpty) {
               Free.pure(Right(resolvedTypes))
             } else {
-              def partitionEitherM[G[_], A, B, C](
-                  fa: List[A]
-              )(f: A => G[Either[B, C]])(implicit A: cats.Alternative[List], M: cats.Monad[G]): G[(List[B], List[C])] = {
-                import cats.instances.tuple._
-
-                implicit val mb: cats.Monoid[List[B]] = A.algebra[B]
-                implicit val mc: cats.Monoid[List[C]] = A.algebra[C]
-
-                Foldable[List].foldMapM[G, A, (List[B], List[C])](fa)(
-                  a =>
-                    f(a).map {
-                      case Right(c) => (A.empty[B], A.pure(c))
-                      case Left(b)  => (A.pure(b), A.empty[C])
-                    }
-                )
-              }
-
-              (partitionEitherM(lazyTypes) {
-                case x @ (clsName, Deferred(tpeName)) =>
-                  lookupTypeName(clsName, tpeName, resolvedTypes)(Free.pure _).map(Either.fromOption(_, x))
-                case x @ (clsName, DeferredArray(tpeName, containerTpe)) =>
-                  lookupTypeName(clsName, tpeName, resolvedTypes)(liftVectorType(_, containerTpe)).map(Either.fromOption(_, x))
-                case x @ (clsName, DeferredMap(tpeName, containerTpe)) =>
-                  lookupTypeName(clsName, tpeName, resolvedTypes)(liftMapType(_, containerTpe)).map(Either.fromOption(_, x))
-              }).map({
-                case (newLazyTypes, newResolvedTypes) =>
-                  Left((newLazyTypes, resolvedTypes ++ newResolvedTypes))
-              })
+              lazyTypes
+                .partitionEitherM({
+                  case x @ (clsName, Deferred(tpeName)) =>
+                    lookupTypeName(clsName, tpeName, resolvedTypes)(Free.pure _).map(Either.fromOption(_, x))
+                  case x @ (clsName, DeferredArray(tpeName, containerTpe)) =>
+                    lookupTypeName(clsName, tpeName, resolvedTypes)(liftVectorType(_, containerTpe)).map(Either.fromOption(_, x))
+                  case x @ (clsName, DeferredMap(tpeName, containerTpe)) =>
+                    lookupTypeName(clsName, tpeName, resolvedTypes)(liftMapType(_, containerTpe)).map(Either.fromOption(_, x))
+                })
+                .map({
+                  case (newLazyTypes, newResolvedTypes) =>
+                    Left((newLazyTypes, resolvedTypes ++ newResolvedTypes))
+                })
             }
         }
     }
@@ -90,7 +75,7 @@ object SwaggerUtil {
     def resolve[L <: LA, F[_]](
         value: ResolvedType[L],
         protocolElems: List[StrictProtocolElems[L]]
-    )(implicit Sc: ScalaTerms[L, F], Sw: SwaggerTerms[L, F]): Free[F, Resolved[L]] = {
+    )(implicit Sc: ScalaTerms[L, Free[F, ?]], Sw: SwaggerTerms[L, F]): Free[F, Resolved[L]] = {
       import Sc._
       import Sw._
       log.debug(s"value: ${value} in ${protocolElems.length} protocol elements") >> (value match {
@@ -135,25 +120,31 @@ object SwaggerUtil {
     }
   }
 
-  def customTypeName[L <: LA, F[_], A: VendorExtension.VendorExtensible](v: A)(implicit S: ScalaTerms[L, F]): Free[F, Option[String]] =
+  def customTypeName[L <: LA, F[_], A: VendorExtension.VendorExtensible](v: A)(implicit S: ScalaTerms[L, F]): F[Option[String]] = {
+    import S._
     for {
-      prefixes <- S.vendorPrefixes()
+      prefixes <- vendorPrefixes()
     } yield CustomTypeName(v, prefixes)
+  }
 
-  def customArrayTypeName[L <: LA, F[_], A: VendorExtension.VendorExtensible](v: A)(implicit S: ScalaTerms[L, F]): Free[F, Option[String]] =
+  def customArrayTypeName[L <: LA, F[_], A: VendorExtension.VendorExtensible](v: A)(implicit S: ScalaTerms[L, F]): F[Option[String]] = {
+    import S._
     for {
-      prefixes <- S.vendorPrefixes()
+      prefixes <- vendorPrefixes()
     } yield CustomArrayTypeName(v, prefixes)
+  }
 
-  def customMapTypeName[L <: LA, F[_], A: VendorExtension.VendorExtensible](v: A)(implicit S: ScalaTerms[L, F]): Free[F, Option[String]] =
+  def customMapTypeName[L <: LA, F[_], A: VendorExtension.VendorExtensible](v: A)(implicit S: ScalaTerms[L, F]): F[Option[String]] = {
+    import S._
     for {
-      prefixes <- S.vendorPrefixes()
+      prefixes <- vendorPrefixes()
     } yield CustomMapTypeName(v, prefixes)
+  }
 
   sealed class ModelMetaTypePartiallyApplied[L <: LA, F[_]](val dummy: Boolean = true) {
     def apply[T <: Schema[_]](
         model: Tracker[T]
-    )(implicit Sc: ScalaTerms[L, F], Sw: SwaggerTerms[L, F], Fw: FrameworkTerms[L, F]): Free[F, ResolvedType[L]] =
+    )(implicit Sc: ScalaTerms[L, Free[F, ?]], Sw: SwaggerTerms[L, F], Fw: FrameworkTerms[L, F]): Free[F, ResolvedType[L]] =
       Sw.log.function("modelMetaType") {
         import Sc._
         import Sw._
@@ -218,7 +209,7 @@ object SwaggerUtil {
 
   def extractConcreteTypes[L <: LA, F[_]](
       definitions: List[(String, Tracker[Schema[_]])]
-  )(implicit Sc: ScalaTerms[L, F], Sw: SwaggerTerms[L, F], F: FrameworkTerms[L, F]): Free[F, List[PropMeta[L]]] = {
+  )(implicit Sc: ScalaTerms[L, Free[F, ?]], Sw: SwaggerTerms[L, F], F: FrameworkTerms[L, F]): Free[F, List[PropMeta[L]]] = {
     import Sc._
     for {
       entries <- definitions.traverse[Free[F, ?], (String, SwaggerUtil.ResolvedType[L])] {
@@ -257,7 +248,7 @@ object SwaggerUtil {
       typeName: Tracker[Option[String]],
       format: Tracker[Option[String]],
       customType: Option[String]
-  )(implicit Sc: ScalaTerms[L, F], Sw: SwaggerTerms[L, F], Fw: FrameworkTerms[L, F]): Free[F, L#Type] =
+  )(implicit Sc: ScalaTerms[L, Free[F, ?]], Sw: SwaggerTerms[L, F], Fw: FrameworkTerms[L, F]): Free[F, L#Type] =
     Sw.log.function(s"typeName(${typeName.unwrapTracker}, ${format.unwrapTracker}, ${customType})") {
       import Sc._
       import Fw._
@@ -281,6 +272,7 @@ object SwaggerUtil {
             case (Some("string"), Some("email"))        => stringType(None)
             case (Some("string"), Some("date"))         => dateType()
             case (Some("string"), Some("date-time"))    => dateTimeType()
+            case (Some("string"), Some("byte"))         => bytesType()
             case (Some("string"), fmt @ Some("binary")) => fileType(None).map(log(fmt, _))
             case (Some("string"), fmt)                  => stringType(fmt).map(log(fmt, _))
             case (Some("number"), Some("float"))        => floatType()
@@ -313,7 +305,7 @@ object SwaggerUtil {
     }
 
   def propMeta[L <: LA, F[_]](property: Tracker[Schema[_]])(
-      implicit Sc: ScalaTerms[L, F],
+      implicit Sc: ScalaTerms[L, Free[F, ?]],
       Sw: SwaggerTerms[L, F],
       Fw: FrameworkTerms[L, F]
   ): Free[F, ResolvedType[L]] = {
@@ -328,7 +320,7 @@ object SwaggerUtil {
     }
   }
 
-  def liftCustomType[L <: LA, F[_]](s: String)(implicit Sc: ScalaTerms[L, F]): Free[F, Option[L#Type]] = {
+  def liftCustomType[L <: LA, F[_]](s: String)(implicit Sc: ScalaTerms[L, Free[F, ?]]): Free[F, Option[L#Type]] = {
     import Sc._
     val tpe = s.trim
     if (tpe.nonEmpty) {
@@ -337,7 +329,7 @@ object SwaggerUtil {
   }
 
   def propMetaWithName[L <: LA, F[_]](tpe: L#Type, property: Tracker[Schema[_]])(
-      implicit Sc: ScalaTerms[L, F],
+      implicit Sc: ScalaTerms[L, Free[F, ?]],
       Sw: SwaggerTerms[L, F],
       Fw: FrameworkTerms[L, F]
   ): Free[F, ResolvedType[L]] = {
@@ -360,7 +352,7 @@ object SwaggerUtil {
 
   private def propMetaImpl[L <: LA, F[_]](property: Tracker[Schema[_]])(
       strategy: PartialFunction[Schema[_], Free[F, ResolvedType[L]]]
-  )(implicit Sc: ScalaTerms[L, F], Sw: SwaggerTerms[L, F], Fw: FrameworkTerms[L, F]): Free[F, ResolvedType[L]] =
+  )(implicit Sc: ScalaTerms[L, Free[F, ?]], Sw: SwaggerTerms[L, F], Fw: FrameworkTerms[L, F]): Free[F, ResolvedType[L]] =
     Sw.log.function("propMeta") {
       import Fw._
       import Sc._
@@ -439,6 +431,7 @@ object SwaggerUtil {
           .orRefine({ case d: NumberSchema => d })(buildResolveNoDefault)
           .orRefine({ case p: PasswordSchema => p })(buildResolveNoDefault)
           .orRefine({ case f: FileSchema => f })(buildResolveNoDefault)
+          .orRefine({ case b: BinarySchema => b })(buildResolveNoDefault)
           .orRefine({ case u: UUIDSchema => u })(buildResolveNoDefault)
           .orRefineFallback(x => fallbackPropertyTypeHandler(x).map(Resolved[L](_, None, None, None, None))) // This may need to be rawType=string?
       }
@@ -447,7 +440,7 @@ object SwaggerUtil {
   def extractSecuritySchemes[L <: LA, F[_]](
       swagger: OpenAPI,
       prefixes: List[String]
-  )(implicit Sw: SwaggerTerms[L, F], Sc: ScalaTerms[L, F]): Free[F, Map[String, SecurityScheme[L]]] = {
+  )(implicit Sw: SwaggerTerms[L, F], Sc: ScalaTerms[L, Free[F, ?]]): Free[F, Map[String, SecurityScheme[L]]] = {
     import Sw._
     import Sc._
 
@@ -547,9 +540,9 @@ object SwaggerUtil {
       type P  = Parser[(Option[TN], T)]
       type LP = Parser[List[(Option[TN], T)]]
 
-      val plainString      = many(noneOf("{}/?")).map(_.mkString)
-      val plainNEString    = many1(noneOf("{}/?")).map(_.toList.mkString)
-      val stringSegment: P = plainNEString.map(s => (None, stringPath(s)))
+      val plainString: Parser[String]   = many(noneOf("{}/?")).map(_.mkString)
+      val plainNEString: Parser[String] = many1(noneOf("{}/?")).map(_.toList.mkString)
+      val stringSegment: P              = plainNEString.map(s => (None, stringPath(s)))
       def regexSegment(implicit pathArgs: List[ScalaParameter[ScalaLanguage]]): P =
         (plainString ~ variable ~ plainString).flatMap {
           case ((before, binding), after) =>
@@ -589,8 +582,8 @@ object SwaggerUtil {
           .parse(path.unwrapTracker)
           .done match {
           case ParseResult.Done(input, result)         => Target.pure(result)
-          case ParseResult.Fail(input, stack, message) => Target.raiseError(s"Failed to parse URL: ${message} (unparsed: ${input}) (${path.showHistory})")
-          case ParseResult.Partial(k)                  => Target.raiseError(s"Unexpected parser state attempting to parse ${path} (${path.showHistory})")
+          case ParseResult.Fail(input, stack, message) => Target.raiseUserError(s"Failed to parse URL: ${message} (unparsed: ${input}) (${path.showHistory})")
+          case ParseResult.Partial(k)                  => Target.raiseUserError(s"Unexpected parser state attempting to parse ${path} (${path.showHistory})")
         }
     }
 

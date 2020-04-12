@@ -3,8 +3,9 @@ package com.twilio.guardrail.core
 import _root_.io.swagger.v3.oas.models.OpenAPI
 import cats.data._
 import cats.implicits._
-import com.twilio.guardrail.Target
+import com.twilio.guardrail.{ Target, UserError }
 import scala.collection.JavaConverters._
+import cats.Functor
 
 /**
   * Tracker is a class to marshal access into potentially nullable fields in Java classes,
@@ -57,7 +58,7 @@ trait LowestPriorityTrackerInstances {
       }
   }
 
-  implicit def trackerFunctor = new cats.Functor[Tracker] {
+  implicit def trackerFunctor: Functor[Tracker] = new cats.Functor[Tracker] {
     def map[A, B](fa: Tracker[A])(f: A => B): Tracker[B] = new Tracker(f(fa.unwrapTracker), fa.history)
   }
 }
@@ -74,7 +75,7 @@ trait LowPriorityTrackerSyntax extends LowestPriorityTrackerInstances {
 
 trait HighPriorityTrackerSyntax extends LowPriorityTrackerSyntax {
   implicit class StringyEitherSyntax[B](tracker: Tracker[Either[String, B]]) {
-    def raiseErrorIfLeft: Target[Tracker[B]] = tracker.fold(err => Target.raiseError(s"${err.get} (${err.showHistory})"), Target.pure _)
+    def raiseErrorIfLeft: Target[Tracker[B]] = tracker.fold(err => Target.raiseUserError(s"${err.get} (${err.showHistory})"), Target.pure _)
   }
 
   implicit class EitherSyntax[A, B](tracker: Tracker[Either[A, B]]) {
@@ -86,7 +87,7 @@ trait HighPriorityTrackerSyntax extends LowPriorityTrackerSyntax {
     def fold[B](default: => B)(f: Tracker[A] => B): B =
       tracker.unwrapTracker.fold(default)(x => f(Tracker.cloneHistory(tracker, x)))
     def orHistory: Either[Vector[String], Tracker[A]]      = tracker.indexedCosequence.toRight(tracker.history)
-    def raiseErrorIfEmpty(err: String): Target[Tracker[A]] = Target.fromOption(tracker.indexedCosequence, s"${err} (${tracker.showHistory})")
+    def raiseErrorIfEmpty(err: String): Target[Tracker[A]] = Target.fromOption(tracker.indexedCosequence, UserError(s"${err} (${tracker.showHistory})"))
     class FlatDownFieldPartiallyApplied[C](val dummy: Boolean = true) {
       def apply[B](label: String, f: A => B)(implicit ev: Tracker.Convincer[Option[B], C]): Tracker[C] =
         new Tracker(ev(tracker.get.flatMap(x => Option(f(x)))), tracker.history :+ s".${label}")
@@ -137,7 +138,7 @@ trait HighPriorityTrackerSyntax extends LowPriorityTrackerSyntax {
 
 object Tracker extends HighPriorityTrackerEvidence with HighPriorityTrackerSyntax {
   object Convincer {
-    def apply[A, B](f: A => B) = new Convincer[A, B] {
+    def apply[A, B](f: A => B): Convincer[A, B] = new Convincer[A, B] {
       def apply(a: A): B = f(a)
     }
   }

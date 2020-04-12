@@ -8,7 +8,6 @@ import cats.data.NonEmptyList
 import cats.implicits._
 import com.twilio.guardrail._
 import com.twilio.guardrail.core.CoreTermInterp
-import com.twilio.guardrail.terms.CoreTerm
 import com.twilio.guardrail.languages.ScalaLanguage
 import org.scalatest.{ FunSuite, Matchers }
 
@@ -85,12 +84,11 @@ class WritePackageSpec extends FunSuite with Matchers {
     )
 
     import com.twilio.guardrail.generators.{ AkkaHttp, ScalaModule }
-    val result: List[WriteTree] = CoreTarget
+    val result: List[WriteTree] = Target
       .unsafeExtract(
         Common
-          .processArgs[ScalaLanguage, CoreTerm[ScalaLanguage, ?]](args)
-          .foldMap(
-            CoreTermInterp[ScalaLanguage](
+          .processArgs[ScalaLanguage, Target](args)(
+            new CoreTermInterp[ScalaLanguage](
               "akka-http",
               ScalaModule.extract, {
                 case "akka-http" => AkkaHttp
@@ -147,12 +145,11 @@ class WritePackageSpec extends FunSuite with Matchers {
     )
 
     import com.twilio.guardrail.generators.{ AkkaHttp, ScalaModule }
-    val result: List[WriteTree] = CoreTarget
+    val result: List[WriteTree] = Target
       .unsafeExtract(
         Common
-          .processArgs[ScalaLanguage, CoreTerm[ScalaLanguage, ?]](args)
-          .foldMap(
-            CoreTermInterp[ScalaLanguage](
+          .processArgs[ScalaLanguage, Target](args)(
+            new CoreTermInterp[ScalaLanguage](
               "akka-http",
               ScalaModule.extract, {
                 case "akka-http" => AkkaHttp

@@ -1,6 +1,7 @@
 package com.twilio.guardrail.generators.Java
 
 import cats.~>
+import cats.implicits._
 import com.github.javaparser.ast.expr._
 import com.twilio.guardrail.Target
 import com.twilio.guardrail.generators.syntax.Java._
@@ -10,7 +11,7 @@ import com.twilio.guardrail.terms.framework._
 object DropwizardGenerator {
   object FrameworkInterp extends (FrameworkTerm[JavaLanguage, ?] ~> Target) {
     def apply[T](term: FrameworkTerm[JavaLanguage, T]): Target[T] = term match {
-      case FileType(format)   => safeParseType(format.getOrElse("java.io.File"))
+      case FileType(format)   => safeParseType(format.getOrElse("java.io.InputStream"))
       case ObjectType(format) => safeParseType("com.fasterxml.jackson.databind.JsonNode")
 
       case GetFrameworkImports(tracing) =>
@@ -97,7 +98,7 @@ object DropwizardGenerator {
           case "511" => parseStatusCode(511, "NetworkAuthenticationRequired")
           case "598" => parseStatusCode(598, "NetworkReadTimeout")
           case "599" => parseStatusCode(599, "NetworkConnectTimeout")
-          case _     => Target.raiseError(s"Unknown HTTP status code: ${key}")
+          case _     => Target.raiseUserError(s"Unknown HTTP status code: ${key}")
         }
     }
   }

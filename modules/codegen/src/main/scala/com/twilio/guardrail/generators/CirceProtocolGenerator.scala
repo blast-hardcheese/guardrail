@@ -16,7 +16,7 @@ import scala.collection.JavaConverters._
 import scala.meta._
 
 object CirceProtocolGenerator {
-  def suffixClsName(prefix: String, clsName: String) = Pat.Var(Term.Name(s"${prefix}${clsName}"))
+  def suffixClsName(prefix: String, clsName: String): Pat.Var = Pat.Var(Term.Name(s"${prefix}${clsName}"))
 
   def lookupTypeName(tpeName: String, concreteTypes: List[PropMeta[ScalaLanguage]])(f: Type => Type): Option[Type] =
     concreteTypes
@@ -110,57 +110,59 @@ object CirceProtocolGenerator {
             Target.pure(extractedProps)
           })
           .orRefine({ case x: Schema[_] if Option(x.get$ref()).isDefined => x })(
-            comp => Target.raiseError(s"Attempted to extractProperties for a ${comp.get.getClass()}, unsure what to do here (${comp.showHistory})")
+            comp => Target.raiseUserError(s"Attempted to extractProperties for a ${comp.get.getClass()}, unsure what to do here (${comp.showHistory})")
           )
           .getOrElse(Target.pure(List.empty))
           .map(_.toList)
 
       case TransformProperty(clsName, name, property, meta, needCamelSnakeConversion, concreteTypes, isRequired, isCustomType, defaultValue) =>
-        Target.log.function(s"transformProperty")(for {
-          _ <- Target.log.debug(s"Args: (${clsName}, ${name}, ...)")
+        Target.log.function(s"transformProperty") {
+          for {
+            _ <- Target.log.debug(s"Args: (${clsName}, ${name}, ...)")
 
-          argName = if (needCamelSnakeConversion) name.toCamelCase else name
-          rawType = RawParameterType(Option(property.getType), Option(property.getFormat))
+            argName = if (needCamelSnakeConversion) name.toCamelCase else name
+            rawType = RawParameterType(Option(property.getType), Option(property.getFormat))
 
-          readOnlyKey = Option(name).filter(_ => Option(property.getReadOnly).contains(true))
-          emptyToNull = (property match {
-            case d: DateSchema      => EmptyValueIsNull(d)
-            case dt: DateTimeSchema => EmptyValueIsNull(dt)
-            case s: StringSchema    => EmptyValueIsNull(s)
-            case _                  => None
-          }).getOrElse(EmptyIsEmpty)
-          dataRedaction = DataRedaction(property).getOrElse(DataVisible)
+            readOnlyKey = Option(name).filter(_ => Option(property.getReadOnly).contains(true))
+            emptyToNull = (property match {
+              case d: DateSchema      => EmptyValueIsNull(d)
+              case dt: DateTimeSchema => EmptyValueIsNull(dt)
+              case s: StringSchema    => EmptyValueIsNull(s)
+              case _                  => None
+            }).getOrElse(EmptyIsEmpty)
+            dataRedaction = DataRedaction(property).getOrElse(DataVisible)
 
-          (tpe, classDep) = meta match {
-            case SwaggerUtil.Resolved(declType, classDep, _, Some(rawType), rawFormat) if SwaggerUtil.isFile(rawType, rawFormat) && !isCustomType =>
-              // assume that binary data are represented as a string. allow users to override.
-              (t"String", classDep)
-            case SwaggerUtil.Resolved(declType, classDep, _, _, _) =>
-              (declType, classDep)
-            case SwaggerUtil.Deferred(tpeName) =>
-              val tpe = concreteTypes.find(_.clsName == tpeName).map(_.tpe).getOrElse {
-                println(s"Unable to find definition for ${tpeName}, just inlining")
-                Type.Name(tpeName)
-              }
-              (tpe, Option.empty)
-            case SwaggerUtil.DeferredArray(tpeName, containerTpe) =>
-              val concreteType = lookupTypeName(tpeName, concreteTypes)(identity)
-              val innerType    = concreteType.getOrElse(Type.Name(tpeName))
-              (t"${containerTpe.getOrElse(t"Vector")}[$innerType]", Option.empty)
-            case SwaggerUtil.DeferredMap(tpeName, customTpe) =>
-              val concreteType = lookupTypeName(tpeName, concreteTypes)(identity)
-              val innerType    = concreteType.getOrElse(Type.Name(tpeName))
-              (t"${customTpe.getOrElse(t"Map")}[String, $innerType]", Option.empty)
-          }
+            (tpe, classDep) = meta match {
+              case SwaggerUtil.Resolved(declType, classDep, _, Some(rawType), rawFormat) if SwaggerUtil.isFile(rawType, rawFormat) && !isCustomType =>
+                // assume that binary data are represented as a string. allow users to override.
+                (t"String", classDep)
+              case SwaggerUtil.Resolved(declType, classDep, _, _, _) =>
+                (declType, classDep)
+              case SwaggerUtil.Deferred(tpeName) =>
+                val tpe = concreteTypes.find(_.clsName == tpeName).map(_.tpe).getOrElse {
+                  println(s"Unable to find definition for ${tpeName}, just inlining")
+                  Type.Name(tpeName)
+                }
+                (tpe, Option.empty)
+              case SwaggerUtil.DeferredArray(tpeName, containerTpe) =>
+                val concreteType = lookupTypeName(tpeName, concreteTypes)(identity)
+                val innerType    = concreteType.getOrElse(Type.Name(tpeName))
+                (t"${containerTpe.getOrElse(t"Vector")}[$innerType]", Option.empty)
+              case SwaggerUtil.DeferredMap(tpeName, customTpe) =>
+                val concreteType = lookupTypeName(tpeName, concreteTypes)(identity)
+                val innerType    = concreteType.getOrElse(Type.Name(tpeName))
+                (t"${customTpe.getOrElse(t"Map")}[String, $innerType]", Option.empty)
+            }
 
-          (finalDeclType, finalDefaultValue) = Option(isRequired)
-            .filterNot(_ == false)
-            .fold[(Type, Option[Term])](
-              (t"Option[${tpe}]", Some(defaultValue.fold[Term](q"None")(t => q"Option($t)")))
-            )(Function.const((tpe, defaultValue)) _)
-          term = param"${Term.Name(argName)}: ${finalDeclType}".copy(default = finalDefaultValue)
-          dep  = classDep.filterNot(_.value == clsName) // Filter out our own class name
-        } yield ProtocolParameter[ScalaLanguage](term, name, dep, rawType, readOnlyKey, emptyToNull, dataRedaction, finalDefaultValue))
+            (finalDeclType, finalDefaultValue) = Option(isRequired)
+              .filterNot(_ == false)
+              .fold[(Type, Option[Term])](
+                (t"Option[${tpe}]", Some(defaultValue.fold[Term](q"None")(t => q"Option($t)")))
+              )(Function.const((tpe, defaultValue)) _)
+            term = param"${Term.Name(argName)}: ${finalDeclType}".copy(default = finalDefaultValue)
+            dep  = classDep.filterNot(_.value == clsName) // Filter out our own class name
+          } yield ProtocolParameter[ScalaLanguage](term, RawParameterName(name), dep, rawType, readOnlyKey, emptyToNull, dataRedaction, finalDefaultValue)
+        }
 
       case RenderDTOClass(clsName, selfParams, parents) =>
         val discriminators     = parents.flatMap(_.discriminators)
@@ -173,6 +175,7 @@ object CirceProtocolGenerator {
         val params = (parents.reverse.flatMap(_.params) ++ selfParams).filterNot(
           param => discriminatorNames.contains(param.term.name.value)
         )
+
         val terms = params.map(_.term)
 
         val toStringMethod = if (params.exists(_.dataRedaction != DataVisible)) {
@@ -205,7 +208,7 @@ object CirceProtocolGenerator {
         val discriminators     = parents.flatMap(_.discriminators)
         val discriminatorNames = discriminators.map(_.propertyName).toSet
         val params = (parents.reverse.flatMap(_.params) ++ selfParams).filterNot(
-          param => discriminatorNames.contains(param.name)
+          param => discriminatorNames.contains(param.name.value)
         )
         val readOnlyKeys: List[String] = params.flatMap(_.readOnlyKey).toList
         val paramCount                 = params.length
@@ -248,7 +251,7 @@ object CirceProtocolGenerator {
           )
         } else */ {
             val pairs: List[Term.Tuple] = params
-              .map(param => q"""(${Lit.String(param.name)}, a.${Term.Name(param.term.name.value)}.asJson)""")
+              .map(param => q"""(${Lit.String(param.name.value)}, a.${Term.Name(param.term.name.value)}.asJson)""")
               .to[List]
             Option(
               q"""
@@ -267,7 +270,7 @@ object CirceProtocolGenerator {
         val discriminators     = parents.flatMap(_.discriminators)
         val discriminatorNames = discriminators.map(_.propertyName).toSet
         val params = (parents.reverse.flatMap(_.params) ++ selfParams).filterNot(
-          param => discriminatorNames.contains(param.name)
+          param => discriminatorNames.contains(param.name.value)
         )
         val needsEmptyToNull: Boolean = params.exists(_.emptyToNull == EmptyIsNull)
         val paramCount                = params.length
@@ -291,21 +294,21 @@ object CirceProtocolGenerator {
                 .traverse({
                   case (param, idx) =>
                     for {
-                      rawTpe <- Target.fromOption(param.term.decltpe, "Missing type")
+                      rawTpe <- Target.fromOption(param.term.decltpe, UserError("Missing type"))
                       tpe <- rawTpe match {
                         case tpe: Type => Target.pure(tpe)
-                        case x         => Target.raiseError(s"Unsure how to map ${x.structure}, please report this bug!")
+                        case x         => Target.raiseUserError(s"Unsure how to map ${x.structure}, please report this bug!")
                       }
                     } yield {
                       val term = Term.Name(s"v$idx")
                       val enum = if (param.emptyToNull == EmptyIsNull) {
                         enumerator"""
                   ${Pat.Var(term)} <- c.downField(${Lit
-                          .String(param.name)}).withFocus(j => j.asString.fold(j)(s => if(s.isEmpty) Json.Null else j)).as[${tpe}]
+                          .String(param.name.value)}).withFocus(j => j.asString.fold(j)(s => if(s.isEmpty) Json.Null else j)).as[${tpe}]
                 """
                       } else {
                         enumerator"""
-                  ${Pat.Var(term)} <- c.downField(${Lit.String(param.name)}).as[${tpe}]
+                  ${Pat.Var(term)} <- c.downField(${Lit.String(param.name.value)}).as[${tpe}]
                 """
                       }
                       (term, enum)
@@ -352,16 +355,16 @@ object CirceProtocolGenerator {
           result <- arr match {
             case SwaggerUtil.Resolved(tpe, dep, default, _, _) => Target.pure(tpe)
             case SwaggerUtil.Deferred(tpeName) =>
-              Target.fromOption(lookupTypeName(tpeName, concreteTypes)(identity), s"Unresolved reference ${tpeName}")
+              Target.fromOption(lookupTypeName(tpeName, concreteTypes)(identity), UserError(s"Unresolved reference ${tpeName}"))
             case SwaggerUtil.DeferredArray(tpeName, containerTpe) =>
               Target.fromOption(
                 lookupTypeName(tpeName, concreteTypes)(tpe => t"${containerTpe.getOrElse(t"Vector")}[${tpe}]"),
-                s"Unresolved reference ${tpeName}"
+                UserError(s"Unresolved reference ${tpeName}")
               )
             case SwaggerUtil.DeferredMap(tpeName, customTpe) =>
               Target.fromOption(
                 lookupTypeName(tpeName, concreteTypes)(tpe => t"Vector[${customTpe.getOrElse(t"Map")}[String, ${tpe}]]"),
-                s"Unresolved reference ${tpeName}"
+                UserError(s"Unresolved reference ${tpeName}")
               )
           }
         } yield result
@@ -371,7 +374,7 @@ object CirceProtocolGenerator {
   object ProtocolSupportTermInterp extends (ProtocolSupportTerm[ScalaLanguage, ?] ~> Target) {
     def apply[T](term: ProtocolSupportTerm[ScalaLanguage, T]): Target[T] = term match {
       case ExtractConcreteTypes(definitions) =>
-        definitions.fold[Target[List[PropMeta[ScalaLanguage]]]](Target.raiseError _, Target.pure _)
+        definitions.fold[Target[List[PropMeta[ScalaLanguage]]]](Target.raiseUserError _, Target.pure _)
 
       case ProtocolImports() =>
         Target.pure(
@@ -424,7 +427,7 @@ object CirceProtocolGenerator {
                       val thisParent = (clsName, e, tail)
                       allParents(e).map(otherParents => thisParent :: otherParents)
                   })
-                  .getOrElse(Target.raiseError(s"Reference ${head.downField("$ref", _.get$ref()).get} not found among definitions"))
+                  .getOrElse(Target.raiseUserError(s"Reference ${head.downField("$ref", _.get$ref()).get} not found among definitions"))
               case _ => Target.pure(List.empty)
             }
           ).getOrElse(Target.pure(List.empty))
@@ -494,7 +497,7 @@ object CirceProtocolGenerator {
                         case tpe: Type => Some(tpe)
                         case x         => None
                       }),
-                    t.decltpe.fold("Nothing to map")(x => s"Unsure how to map ${x.structure}, please report this bug!")
+                    UserError(t.decltpe.fold("Nothing to map")(x => s"Unsure how to map ${x.structure}, please report this bug!"))
                   )
                 } yield q"""def ${Term.Name(t.name.value)}: ${tpe}"""
               }

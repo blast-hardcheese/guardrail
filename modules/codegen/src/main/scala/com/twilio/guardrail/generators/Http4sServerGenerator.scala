@@ -11,7 +11,7 @@ import com.twilio.guardrail.generators.syntax._
 import com.twilio.guardrail.generators.operations.TracingLabelFormatter
 import com.twilio.guardrail.generators.syntax.Scala._
 import com.twilio.guardrail.languages.ScalaLanguage
-import com.twilio.guardrail.protocol.terms.{ Header, Response, Responses }
+import com.twilio.guardrail.protocol.terms.{ ContentType, Header, Response, Responses }
 import com.twilio.guardrail.protocol.terms.server._
 import com.twilio.guardrail.shims._
 import com.twilio.guardrail.terms.RouteMeta
@@ -41,7 +41,7 @@ object Http4sServerGenerator {
                 TracingLabel(operation)
                   .map(Lit.String(_))
                   .orElse(resourceName.lastOption.map(clientName => TracingLabelFormatter(clientName, operationId.get).toLit)),
-                s"Missing client name (${operation.showHistory})"
+                UserError(s"Missing client name (${operation.showHistory})")
               )
             } yield Some(TracingField[ScalaLanguage](ScalaParameter.fromParam(param"traceBuilder: TraceBuilder[F]"), q"""trace(${label})"""))
           } else Target.pure(None)
@@ -120,7 +120,7 @@ object Http4sServerGenerator {
       case HttpMethod.PATCH  => Target.pure(Term.Name("PATCH"))
       case HttpMethod.POST   => Target.pure(Term.Name("POST"))
       case HttpMethod.PUT    => Target.pure(Term.Name("PUT"))
-      case other             => Target.raiseError(s"Unknown method: ${other}")
+      case other             => Target.raiseUserError(s"Unknown method: ${other}")
     }
 
     def pathStrToHttp4s(basePath: Option[String], path: Tracker[String], pathArgs: List[ScalaParameter[ScalaLanguage]]): Target[(Pat, Option[Pat])] =
@@ -184,8 +184,8 @@ object Http4sServerGenerator {
               )
             )
         },
-        arg => _ => Target.raiseError(s"Unsupported Iterable[${arg}"),
-        arg => _ => Target.raiseError(s"Unsupported Option[Iterable[${arg}]]"),
+        arg => _ => Target.raiseUserError(s"Unsupported Iterable[${arg}"),
+        arg => _ => Target.raiseUserError(s"Unsupported Option[Iterable[${arg}]]"),
         arg => {
           case t"String" => Target.pure(Param(None, None, q"req.headers.get(${arg.argName.toLit}.ci).map(_.value)"))
           case tpe =>
@@ -566,8 +566,8 @@ object Http4sServerGenerator {
                 )
               )
 
-        val consumes = operation.get.consumes.toList.flatMap(RouteMeta.ContentType.unapply(_))
-        val produces = operation.get.produces.toList.flatMap(RouteMeta.ContentType.unapply(_))
+        val consumes = operation.get.consumes.toList.flatMap(ContentType.unapply(_))
+        val produces = operation.get.produces.toList.flatMap(ContentType.unapply(_))
         val codecs   = if (ServerRawResponse(operation).getOrElse(false)) Nil else generateCodecs(operationId, bodyArgs, responses, consumes, produces)
         val respType = if (isGeneric) t"$responseType[F]" else responseType
         Some(
@@ -599,7 +599,7 @@ object Http4sServerGenerator {
     def combineRouteTerms(terms: List[Case]): Target[Term] =
       Target.log.function("combineRouteTerms")(for {
         _      <- Target.log.debug(s"Args: <${terms.length} routes>")
-        routes <- Target.fromOption(NonEmptyList.fromList(terms), "Generated no routes, no source to generate")
+        routes <- Target.fromOption(NonEmptyList.fromList(terms), UserError("Generated no routes, no source to generate"))
         _      <- routes.traverse(route => Target.log.debug(route.toString))
       } yield scala.meta.Term.PartialFunction(routes.toList))
 
@@ -727,7 +727,7 @@ object Http4sServerGenerator {
             val newName = Term.Name(s"_${param.paramName.value}")
             Target.log.debug(s"Escaping param ${param.argName.value}").flatMap { _ =>
               if (newName.syntax == newName.value) Target.pure(param.withParamName(newName))
-              else Target.raiseError(s"Can't escape parameter with name ${param.argName.value}.")
+              else Target.raiseUserError(s"Can't escape parameter with name ${param.argName.value}.")
             }
           }
         } yield res
@@ -739,15 +739,15 @@ object Http4sServerGenerator {
         operationId: String,
         bodyArgs: Option[ScalaParameter[ScalaLanguage]],
         responses: Responses[ScalaLanguage],
-        consumes: Seq[RouteMeta.ContentType],
-        produces: Seq[RouteMeta.ContentType]
+        consumes: Seq[ContentType],
+        produces: Seq[ContentType]
     ): List[Defn.Val] =
       generateDecoders(operationId, bodyArgs, consumes) ++ generateEncoders(operationId, responses, produces) ++ generateResponseGenerators(
             operationId,
             responses
           )
 
-    def generateDecoders(operationId: String, bodyArgs: Option[ScalaParameter[ScalaLanguage]], consumes: Seq[RouteMeta.ContentType]): List[Defn.Val] =
+    def generateDecoders(operationId: String, bodyArgs: Option[ScalaParameter[ScalaLanguage]], consumes: Seq[ContentType]): List[Defn.Val] =
       bodyArgs.toList.flatMap {
         case ScalaParameter(_, _, _, _, argType) =>
           List(
@@ -756,7 +756,7 @@ object Http4sServerGenerator {
           )
       }
 
-    def generateEncoders(operationId: String, responses: Responses[ScalaLanguage], produces: Seq[RouteMeta.ContentType]): List[Defn.Val] =
+    def generateEncoders(operationId: String, responses: Responses[ScalaLanguage], produces: Seq[ContentType]): List[Defn.Val] =
       for {
         response        <- responses.value
         typeDefaultPair <- response.value
@@ -774,7 +774,7 @@ object Http4sServerGenerator {
           .generateEntityResponseGenerator(q"org.http4s.Status.${response.statusCodeName}")}"
       }
 
-    def generateTracingExtractor(operationId: String, tracingField: Term) =
+    def generateTracingExtractor(operationId: String, tracingField: Term): Defn.Object =
       q"""
          object ${Term.Name(s"usingFor${operationId.capitalize}")} {
            def unapply(r: Request[F]): Option[(Request[F], TraceBuilder[F])] = Some(r -> $tracingField(r))
