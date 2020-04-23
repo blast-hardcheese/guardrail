@@ -75,7 +75,7 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
     dirname: String,
     rootParsed: com.github.javaparser.ast.CompilationUnit,
     method: com.github.javaparser.ast.body.MethodDeclaration
-  ): ((List[String], List[String]), List[DownField]) = {
+  ): (List[String], List[DownField]) = {
     val pkg = rootParsed.getPackageDeclaration().get().getNameAsString()
     val imports = rootParsed.getImports().asScala.toVector.map(_.getNameAsString()).map(i => i.split('.').last -> i).toMap
 
@@ -90,7 +90,7 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
       List((tpe, new java.io.File(dirname, suffix))).filter(_._2.isFile())
     }
     val downField = new DownField(params, dependencies.flatMap(guessPath))
-    ((Nil, Nil), List(downField))
+    ( Nil, List(downField))
   }
 
 
@@ -107,11 +107,11 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
     val rootParsed = javaParser.parse(file).getResult().get
     rootParsed.getTypes.asScala.toVector.flatTraverse({
       case typeDecl: com.github.javaparser.ast.body.ClassOrInterfaceDeclaration =>
-        val ((others, getterNames), downFields) = typeDecl.getMembers().asScala.toList.flatTraverse({
+        val (others, downFields) = typeDecl.getMembers().asScala.toList.flatTraverse({
           case ctor: com.github.javaparser.ast.body.ConstructorDeclaration =>
-            ((Nil, Nil), Nil)
+            (Nil, Nil)
           case field: com.github.javaparser.ast.body.FieldDeclaration =>
-            ((Nil, Nil), Nil)
+            (Nil, Nil)
           case method: com.github.javaparser.ast.body.MethodDeclaration =>
             method.getNameAsString() match {
               case addMethod(properPropertyName) =>
@@ -121,20 +121,20 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
               case setMethod(properPropertyName) =>
                 handleAddMethod(dirname, rootParsed, method)
               case getMethod(properPropertyName) =>
-                ((Nil, List(lowercase(properPropertyName))), Nil)
+                (Nil, Nil)
               case "equals" | "hashCode" | "toString" | "toIndentedString" =>
-                ((Nil, Nil), Nil)
+                (Nil, Nil)
               case other =>
                 // println(s"  Unexpected method name: ${other}")
-                ((List(other), List.empty), List.empty)
+                (List(other), List.empty)
             }
           case enum: com.github.javaparser.ast.body.EnumDeclaration =>
             println(s"TODO: Not handling ${enum.getNameAsString()} yet")
-            ((Nil, Nil), Nil)
+            (Nil, Nil)
           case unknown =>
             // println(unknown.getClass)
             // println(unknown)
-            ((Nil, Nil), Nil)
+            (Nil, Nil)
         })
 
         for {
