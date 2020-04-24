@@ -21,7 +21,8 @@ import _root_.io.swagger.v3.oas.models.tags.Tag
 
 class OpenAPIVersion(val version: String)
 class OpenAPIExtensions(val extensions: Map[String, Object])
-class DownField(val params: Vector[com.github.javaparser.ast.body.Parameter], val dependencies: Vector[(com.github.javaparser.ast.`type`.Type, java.io.File)]) {
+case class PathSuffix(value: String)
+class DownField(val params: Vector[com.github.javaparser.ast.body.Parameter], val dependencies: Vector[(com.github.javaparser.ast.`type`.Type, PathSuffix)]) {
   override def toString() = s"DownField($params, $dependencies)"
 }
 
@@ -72,22 +73,22 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
   val capitalize: String => String = s => (s.take(1).toUpperCase ++ s.drop(1))
 
   def handleAddMethod(
-    dirname: String,
     rootParsed: com.github.javaparser.ast.CompilationUnit,
     method: com.github.javaparser.ast.body.MethodDeclaration
   ): (List[String], List[DownField]) = {
+    import com.github.javaparser.ast.`type`.{ Type => JPType }
     val pkg = rootParsed.getPackageDeclaration().get().getNameAsString()
     val imports = rootParsed.getImports().asScala.toVector.map(_.getNameAsString()).map(i => i.split('.').last -> i).toMap
 
     val params = method.getParameters().asScala.toVector
     val dependencies = params.map(_.getType())
-    def guessPath(tpe: com.github.javaparser.ast.`type`.Type): List[(com.github.javaparser.ast.`type`.Type, java.io.File)] = {
+    def guessPath(tpe: JPType): List[(JPType, PathSuffix)] = {
       val suffix = (tpe.getElementType().asString().split('.').toList match {
         case clsName :: Nil => imports.getOrElse(clsName, s"${pkg}.${clsName}").split('.').toList
         case fullyQualified => fullyQualified
       }).mkString("/") + ".java"
 
-      List((tpe, new java.io.File(dirname, suffix))).filter(_._2.isFile())
+      List((tpe, new PathSuffix(suffix)))
     }
     val downField = new DownField(params, dependencies.flatMap(guessPath))
     ( Nil, List(downField))
@@ -115,11 +116,11 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
           case method: com.github.javaparser.ast.body.MethodDeclaration =>
             method.getNameAsString() match {
               case addMethod(properPropertyName) =>
-                handleAddMethod(dirname, rootParsed, method)
-              case addMethod(properPropertyName) =>
-                handleAddMethod(dirname, rootParsed, method)
+                handleAddMethod(rootParsed, method)
               case setMethod(properPropertyName) =>
-                handleAddMethod(dirname, rootParsed, method)
+                handleAddMethod(rootParsed, method)
+              case setMethod(properPropertyName) =>
+                handleAddMethod(rootParsed, method)
               case getMethod(properPropertyName) =>
                 (Nil, Nil)
               case "equals" | "hashCode" | "toString" | "toIndentedString" =>
@@ -139,10 +140,10 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
 
         for {
           nextFiles <- downFields.toVector.flatTraverse { downField =>
-            downField.dependencies.flatTraverse { case (tpe, file) =>
+            downField.dependencies.flatTraverse { case (tpe, PathSuffix(suffix)) =>
               for {
                 seen <- State.get[Set[com.github.javaparser.ast.`type`.Type]]
-                res = if (seen contains tpe) Vector.empty else Vector(file)
+                res = if (seen contains tpe) Vector.empty else Vector(new java.io.File(dirname, suffix)).filter(_.isFile())
                 _ <- State.set[Set[com.github.javaparser.ast.`type`.Type]](seen + tpe)
               } yield res
             }
