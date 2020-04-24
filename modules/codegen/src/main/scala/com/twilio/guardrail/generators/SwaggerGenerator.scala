@@ -141,7 +141,7 @@ object SwaggerGenerator {
                 .indexedCosequence
                 .map { tags =>
                   println(
-                    s"Warning: Using `tags` to define package membership is deprecated in favor of the `x-jvm-package` vendor extension (${tags.history})"
+                    s"Warning: Using `tags` to define package membership is deprecated in favor of the `x-jvm-package` vendor extension (${tags.showHistory})"
                   )
                   tags.get.toList
                 }
