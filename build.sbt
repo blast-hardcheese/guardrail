@@ -255,9 +255,6 @@ lazy val codegen = (project in file("modules/codegen"))
       "io.swagger.parser.v3"        % "swagger-parser"                % "2.0.19",
       "org.tpolecat"                %% "atto-core"                    % "0.6.3",
       "org.typelevel"               %% "cats-core"                    % catsVersion,
-      "org.typelevel"               %% "cats-kernel"                  % catsVersion,
-      "org.typelevel"               %% "cats-macros"                  % catsVersion,
-      "org.typelevel"               %% "cats-free"                    % catsVersion,
       "org.scala-lang.modules"      %% "scala-java8-compat"           % "0.9.0",
     ),
     scalacOptions ++= List(
