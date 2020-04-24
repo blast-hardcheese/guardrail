@@ -1,5 +1,6 @@
 package com.twilio.guardrail.test.generator
 
+import cats._
 import cats.data._
 import cats.implicits._
 
@@ -18,12 +19,77 @@ import _root_.io.swagger.v3.oas.models.info.Info
 import _root_.io.swagger.v3.oas.models.security.SecurityRequirement
 import _root_.io.swagger.v3.oas.models.servers.Server
 import _root_.io.swagger.v3.oas.models.tags.Tag
+import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserTypeAdapter
+import com.github.javaparser.ast.`type`.{ Type => JPType }
 
 class OpenAPIVersion(val version: String)
 class OpenAPIExtensions(val extensions: Map[String, Object])
 case class PathSuffix(value: String)
-class DownField(val params: Vector[com.github.javaparser.ast.body.Parameter], val dependencies: Vector[(com.github.javaparser.ast.`type`.Type, PathSuffix)]) {
-  override def toString() = s"DownField($params, $dependencies)"
+case class MethodDecl(name: String, params: Vector[com.github.javaparser.ast.body.Parameter])
+object MethodDecl {
+  def fromMethod(method: com.github.javaparser.ast.body.MethodDeclaration): Ior[MethodDecl, MethodDecl] = {
+    val params = method.getParameters().asScala.toVector
+
+    Ior.left[MethodDecl, MethodDecl](MethodDecl(method.getNameAsString(), params))
+  }
+}
+case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[(com.github.javaparser.ast.`type`.Type, PathSuffix)]) {
+  private[this] val addMethod = "^add(.*)$".r
+  private[this] val setMethod = "^set(.*)$".r
+  private[this] val getMethod = "^get(.*)$".r
+  private[this] val lowercase: String => String = s => (s.take(1).toLowerCase ++ s.drop(1))
+
+  private[this] def guessAll(method: MethodDecl): Vector[String] = {
+    Vector(method.name).flatMap {
+      case addMethod(capped) =>
+        val typeName = method.params match {
+          case Vector(key, value) => value.getType().asString()
+          case Vector(value) => value.getType().asString()
+          case other => throw new Exception(s"Unexpected $other params for 'add' $method")
+        }
+        Vector(lowercase(typeName), lowercase(capped))
+      case setMethod(capped) =>
+        val typeName = method.params match {
+          case Vector(elem) => elem.getType().asString()
+          case other => throw new Exception(s"Unexpected $other params for 'set' $method")
+        }
+        Vector(lowercase(typeName), lowercase(capped))
+      case getMethod(capped) =>
+        throw new Exception(s"Unexpected 'get' for ${method}")
+    }
+  }
+
+  def guessBaseTerm: Option[String] = (methods match {
+    case Ior.Left(a) => guessAll(a)
+    case Ior.Right(b) => guessAll(b)
+    case Ior.Both(a, b) => guessAll(a).intersect(guessAll(b))
+  }).distinct.headOption.orElse {
+    println(s"Unable to come up with a decent base term for $methods")
+    None
+  }
+}
+object DownField {
+  implicit object DownFieldMonoid extends Semigroup[DownField] {
+    def combine(a: DownField, b: DownField): DownField = (a, b) match {
+      case (DownField(methodsA, dependenciesA), DownField(methodsB, dependenciesB)) =>
+        DownField((methodsA, methodsB) match {
+          case (Ior.Left(a), Ior.Right(b)) => Ior.both(a, b)
+          case (Ior.Right(a), Ior.Left(b)) => Ior.both(b, a)
+          case (a@Ior.Left(_), b) => Ior.both(a, b)
+            println(s"Warning, abandoning: $b")
+            a
+          case (a@Ior.Right(_), b) => Ior.both(b, a)
+            println(s"Warning, abandoning: $b")
+            a
+          case (a@Ior.Both(_, _), b) =>
+            println(s"Warning, abandoning: $b")
+            a
+          case (a, b@Ior.Both(_, _)) =>
+            println(s"Warning, abandoning: $a")
+            b
+        }, dependenciesA ++ dependenciesB)
+    }
+  }
 }
 
 object Generator {
@@ -36,7 +102,7 @@ object Generator {
   ): Gen[Paths] = {
     val elem = new Paths
     Gen.zip(genPathItem, genExtensions).map({ case (pathItems, extensions) =>
-pathItems.foreach(_.foreach((elem.addPathItem _).tupled))
+pathItems                   .foreach(_.foreach((elem.addPathItem _ ).tupled))
 extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
       elem
     })
@@ -72,28 +138,28 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
   val lowercase: String => String = s => (s.take(1).toLowerCase ++ s.drop(1))
   val capitalize: String => String = s => (s.take(1).toUpperCase ++ s.drop(1))
 
-  def handleAddMethod(
-    rootParsed: com.github.javaparser.ast.CompilationUnit,
-    method: com.github.javaparser.ast.body.MethodDeclaration
-  ): (List[String], List[DownField]) = {
-    import com.github.javaparser.ast.`type`.{ Type => JPType }
+  def guessPath(pkg: String, imports: Map[String, String])(tpe: JPType): (JPType, PathSuffix) = {
+    val suffix = (tpe.getElementType().asString().split('.').toList match {
+      case clsName :: Nil => imports.getOrElse(clsName, s"${pkg}.${clsName}").split('.').toList
+      case fullyQualified => fullyQualified
+    }).mkString("/") + ".java"
+
+    (tpe, new PathSuffix(suffix))
+  }
+
+  def getDeps(rootParsed: com.github.javaparser.ast.CompilationUnit): com.github.javaparser.ast.body.MethodDeclaration => Vector[(JPType, PathSuffix)] = { method =>
     val pkg = rootParsed.getPackageDeclaration().get().getNameAsString()
     val imports = rootParsed.getImports().asScala.toVector.map(_.getNameAsString()).map(i => i.split('.').last -> i).toMap
 
     val params = method.getParameters().asScala.toVector
     val dependencies = params.map(_.getType())
-    def guessPath(tpe: JPType): List[(JPType, PathSuffix)] = {
-      val suffix = (tpe.getElementType().asString().split('.').toList match {
-        case clsName :: Nil => imports.getOrElse(clsName, s"${pkg}.${clsName}").split('.').toList
-        case fullyQualified => fullyQualified
-      }).mkString("/") + ".java"
-
-      List((tpe, new PathSuffix(suffix)))
-    }
-    val downField = new DownField(params, dependencies.flatMap(guessPath))
-    ( Nil, List(downField))
+    dependencies.map(guessPath(pkg, imports) _)
   }
 
+  def handleAddMethod(
+    rootParsed: com.github.javaparser.ast.CompilationUnit,
+    method: com.github.javaparser.ast.body.MethodDeclaration
+  ): DownField = DownField(MethodDecl.fromMethod(method), getDeps(rootParsed)(method))
 
   def walkNode(dirname: String, file: java.io.File): State[Set[com.github.javaparser.ast.`type`.Type], Unit] = {
     println(s"walkNode(..., $file)")
@@ -116,11 +182,9 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
           case method: com.github.javaparser.ast.body.MethodDeclaration =>
             method.getNameAsString() match {
               case addMethod(properPropertyName) =>
-                handleAddMethod(rootParsed, method)
+                (Nil, List(handleAddMethod(rootParsed, method)))
               case setMethod(properPropertyName) =>
-                handleAddMethod(rootParsed, method)
-              case setMethod(properPropertyName) =>
-                handleAddMethod(rootParsed, method)
+                (Nil, List(handleAddMethod(rootParsed, method)))
               case getMethod(properPropertyName) =>
                 (Nil, Nil)
               case "equals" | "hashCode" | "toString" | "toIndentedString" =>
@@ -139,15 +203,22 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
         })
 
         for {
-          nextFiles <- downFields.toVector.flatTraverse { downField =>
-            downField.dependencies.flatTraverse { case (tpe, PathSuffix(suffix)) =>
-              for {
-                seen <- State.get[Set[com.github.javaparser.ast.`type`.Type]]
-                res = if (seen contains tpe) Vector.empty else Vector(new java.io.File(dirname, suffix)).filter(_.isFile())
-                _ <- State.set[Set[com.github.javaparser.ast.`type`.Type]](seen + tpe)
-              } yield res
+          nextFiles <- downFields
+            .groupBy(_.guessBaseTerm)
+            .mapValues(_.reduceLeft(Semigroup[DownField].combine _))
+            .values
+            .toVector
+            .flatTraverse { case DownField(methods, dependencies) =>
+              println(methods)
+
+              dependencies.flatTraverse { case (tpe, PathSuffix(suffix)) =>
+                for {
+                  seen <- State.get[Set[com.github.javaparser.ast.`type`.Type]]
+                  res = if (seen contains tpe) Vector.empty else Vector(new java.io.File(dirname, suffix)).filter(_.isFile())
+                  _ <- State.set[Set[com.github.javaparser.ast.`type`.Type]](seen + tpe)
+                } yield res
+              }
             }
-          }
           res <- nextFiles.traverse(walkNode(dirname, _))
         } yield res
     }).map(_ => ())
