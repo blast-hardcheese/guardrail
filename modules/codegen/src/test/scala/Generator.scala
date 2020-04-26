@@ -22,6 +22,16 @@ import _root_.io.swagger.v3.oas.models.tags.Tag
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserTypeAdapter
 import com.github.javaparser.ast.`type`.{ Type => JPType }
 
+object Syntax {
+  implicit class OptionalToOption[A](x: java.util.Optional[A]) {
+    def asScala: Option[A] = {
+      if (x.isPresent()) Option(x.get()) else Option.empty
+    }
+  }
+}
+
+import Syntax._
+
 class OpenAPIVersion(val version: String)
 class OpenAPIExtensions(val extensions: Map[String, Object])
 case class PathSuffix(value: String)
