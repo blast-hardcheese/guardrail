@@ -27,12 +27,13 @@ class OpenAPIExtensions(val extensions: Map[String, Object])
 case class PathSuffix(value: String)
 case class MethodDecl(name: String, params: Vector[com.github.javaparser.ast.body.Parameter])
 object MethodDecl {
-  def fromMethod(method: com.github.javaparser.ast.body.MethodDeclaration): Ior[MethodDecl, MethodDecl] = {
+  def fromMethod[A](method: com.github.javaparser.ast.body.MethodDeclaration, inject: MethodDecl => A): A = {
     val params = method.getParameters().asScala.toVector
 
-    Ior.left[MethodDecl, MethodDecl](MethodDecl(method.getNameAsString(), params))
+    inject(MethodDecl(method.getNameAsString(), params))
   }
 }
+
 case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[(com.github.javaparser.ast.`type`.Type, PathSuffix)]) {
   private[this] val addMethod = "^add(.*)$".r
   private[this] val setMethod = "^set(.*)$".r
@@ -68,6 +69,7 @@ case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[
     None
   }
 }
+
 object DownField {
   implicit object DownFieldMonoid extends Semigroup[DownField] {
     def combine(a: DownField, b: DownField): DownField = (a, b) match {
@@ -156,11 +158,6 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
     dependencies.map(guessPath(pkg, imports) _)
   }
 
-  def handleAddMethod(
-    rootParsed: com.github.javaparser.ast.CompilationUnit,
-    method: com.github.javaparser.ast.body.MethodDeclaration
-  ): DownField = DownField(MethodDecl.fromMethod(method), getDeps(rootParsed)(method))
-
   def walkNode(dirname: String, file: java.io.File): State[Set[com.github.javaparser.ast.`type`.Type], Unit] = {
     println(s"walkNode(..., $file)")
     import com.github.javaparser.JavaParser
@@ -182,9 +179,9 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
           case method: com.github.javaparser.ast.body.MethodDeclaration =>
             method.getNameAsString() match {
               case addMethod(properPropertyName) =>
-                (Nil, List(handleAddMethod(rootParsed, method)))
+                (Nil, List(DownField(MethodDecl.fromMethod(method, Ior.right), getDeps(rootParsed)(method))))
               case setMethod(properPropertyName) =>
-                (Nil, List(handleAddMethod(rootParsed, method)))
+                (Nil, List(DownField(MethodDecl.fromMethod(method, Ior.left), getDeps(rootParsed)(method))))
               case getMethod(properPropertyName) =>
                 (Nil, Nil)
               case "equals" | "hashCode" | "toString" | "toIndentedString" =>
