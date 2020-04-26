@@ -91,6 +91,10 @@ case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[
     println(s"Unable to come up with a decent base term for $methods")
     None
   }
+
+  def baseTerm: String = {
+    guessBaseTerm.get
+  }
 }
 
 object DownField {
@@ -228,8 +232,17 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
             .mapValues(_.reduceLeft(Semigroup[DownField].combine _))
             .values
             .toVector
-            .flatTraverse { case DownField(methods, dependencies) =>
+            .flatTraverse { case df@DownField(methods, dependencies) =>
               println(methods)
+
+              val base = q"openAPI"
+              methods match {
+                case Ior.Right(_addMethod) =>
+                  println(_addMethod.params)
+                  println(q"${base}.${Term.Name(_addMethod.name)}(${Term.Name(df.baseTerm)}.orNull)")
+                case Ior.Both(_, _addMethod) =>
+                case Ior.Left(_setMethod) =>
+              }
 
               dependencies.flatTraverse { case (tpe, PathSuffix(suffix)) =>
                 for {
