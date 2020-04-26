@@ -185,6 +185,33 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
     dependencies.map(guessPath(pkg, imports) _)
   }
 
+  def genFromDownField(base: Term.Name): DownField => (Term.Param, Term.Name, Stat) = { case df@DownField(methods, _) =>
+    def buildAdd(_addMethod: MethodDecl) = {
+      val liftParams: Term => Term = {
+        case term if _addMethod.params.length > 1 => q"$term tupled"
+        case term => term
+      }
+      (_addMethod.params, q"${Term.Name(df.baseTerm)}.foreach(${liftParams(q"${base}.${Term.Name(_addMethod.name)} _")})")
+    }
+    def buildSet(_setMethod: MethodDecl) = {
+      (_setMethod.params, q"${base}.${Term.Name(_setMethod.name)}(${Term.Name(df.baseTerm)}.orNull)")
+    }
+
+    val genField = Term.Name(s"gen${capitalize(df.baseTerm)}")
+
+    val (params, addOrSet) = methods match {
+      case Ior.Right(_addMethod) => buildAdd(_addMethod)
+      case Ior.Both(_, _addMethod) => buildAdd(_addMethod)
+      case Ior.Left(_setMethod) => buildSet(_setMethod)
+    }
+
+    val normalizedParams = params
+
+    val genParam = param"${genField}: Gen[Option[Nothing]]"
+
+    (genParam, genField, addOrSet)
+  }
+
   def walkNode(dirname: String, file: java.io.File): State[Set[com.github.javaparser.ast.`type`.Type], Unit] = {
     println(s"walkNode(..., $file)")
     import com.github.javaparser.JavaParser
@@ -196,7 +223,7 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
     val getMethod = "^get(.*)$".r
 
     val rootParsed = javaParser.parse(file).getResult().get
-    rootParsed.getTypes.asScala.toVector.flatTraverse({
+    rootParsed.getTypes.asScala.toVector.traverse({
       case typeDecl: com.github.javaparser.ast.body.ClassOrInterfaceDeclaration =>
         val (others, downFields) = typeDecl.getMembers().asScala.toList.flatTraverse({
           case ctor: com.github.javaparser.ast.body.ConstructorDeclaration =>
@@ -226,35 +253,36 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
             (Nil, Nil)
         })
 
-        for {
-          nextFiles <- downFields
+        typeDecl.getConstructors().asScala.foreach(println)
+        val baseDefn = q"val base = ${Term.New(Init(Type.Name(typeDecl.getNameAsString), Name(""), Nil))}"
+
+        val nexts: State[Set[com.github.javaparser.ast.`type`.Type], Vector[(Term.Param, Term.Name, Stat)]] = for {
+          (fields, nextFiles) <- downFields
             .groupBy(_.guessBaseTerm)
             .mapValues(_.reduceLeft(Semigroup[DownField].combine _))
             .values
             .toVector
-            .flatTraverse { case df@DownField(methods, dependencies) =>
-              println(methods)
+            .flatTraverse({ case df@DownField(methods, dependencies) =>
 
-              val base = q"openAPI"
-              methods match {
-                case Ior.Right(_addMethod) =>
-                  println(_addMethod.params)
-                  println(q"${base}.${Term.Name(_addMethod.name)}(${Term.Name(df.baseTerm)}.orNull)")
-                case Ior.Both(_, _addMethod) =>
-                case Ior.Left(_setMethod) =>
-              }
+              val field = genFromDownField(q"base")(df)
 
-              dependencies.flatTraverse { case (tpe, PathSuffix(suffix)) =>
+              Nested(dependencies.flatTraverse({ case (tpe, PathSuffix(suffix)) =>
                 for {
                   seen <- State.get[Set[com.github.javaparser.ast.`type`.Type]]
                   res = if (seen contains tpe) Vector.empty else Vector(new java.io.File(dirname, suffix)).filter(_.isFile())
                   _ <- State.set[Set[com.github.javaparser.ast.`type`.Type]](seen + tpe)
                 } yield res
-              }
-            }
-          res <- nextFiles.traverse(walkNode(dirname, _))
-        } yield res
-    }).map(_ => ())
+              }).map((Vector(field), _)))
+            }).value
+          _ <- nextFiles.traverse(walkNode(dirname, _)) // Emits a vector of unit
+        } yield fields
+
+        nexts.map((baseDefn, _))
+    }).map({ case xs =>
+      xs.map { case (baseDefn, fields) =>
+        println(s"${baseDefn}: ${fields}")
+      }
+    })
   }
 
   def main(args: Array[String]): Unit = {
