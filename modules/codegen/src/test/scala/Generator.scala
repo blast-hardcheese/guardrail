@@ -50,18 +50,31 @@ case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[
   private[this] val getMethod = "^get(.*)$".r
   private[this] val lowercase: String => String = s => (s.take(1).toLowerCase ++ s.drop(1))
 
+  private[this] def guessTypeName(tpe: JPType): String = {
+    tpe match {
+      case tpe: com.github.javaparser.ast.`type`.ClassOrInterfaceType =>
+        val lastTypeArg: Option[String] = tpe.getName().asString() match {
+          case "List" => tpe.getTypeArguments().asScala.flatMap(_.asScala.toVector.lastOption).map(_.asString())
+          case "Map" =>  tpe.getTypeArguments().asScala.flatMap(_.asScala.toVector.lastOption).map(_.asString())
+          case _ => None
+        }
+
+        lastTypeArg.getOrElse(tpe.asString())
+      case _ => tpe.getElementType().asString()
+    }
+  }
   private[this] def guessAll(method: MethodDecl): Vector[String] = {
     Vector(method.name).flatMap {
       case addMethod(capped) =>
         val typeName = method.params match {
-          case Vector(key, value) => value.getType().asString()
-          case Vector(value) => value.getType().asString()
+          case Vector(key, value) => guessTypeName(value.getType())
+          case Vector(value) => guessTypeName(value.getType())
           case other => throw new Exception(s"Unexpected $other params for 'add' $method")
         }
         Vector(lowercase(typeName), lowercase(capped))
       case setMethod(capped) =>
         val typeName = method.params match {
-          case Vector(elem) => elem.getType().asString()
+          case Vector(elem) => guessTypeName(elem.getType())
           case other => throw new Exception(s"Unexpected $other params for 'set' $method")
         }
         Vector(lowercase(typeName), lowercase(capped))
