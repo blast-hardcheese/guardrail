@@ -185,7 +185,7 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
     dependencies.map(guessPath(pkg, imports) _)
   }
 
-  def genFromDownField(base: Term.Name): DownField => (Term.Param, Term.Name, Stat) = { case df@DownField(methods, _) =>
+  def genFromDownField(base: Term.Name): DownField => (Term.Param, (Term.Name, Term.Name), Stat) = { case df@DownField(methods, _) =>
     def buildAdd(_addMethod: MethodDecl) = {
       val liftParams: Term => Term = {
         case term if _addMethod.params.length > 1 => q"$term tupled"
@@ -205,11 +205,14 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
       case Ior.Left(_setMethod) => buildSet(_setMethod)
     }
 
-    val normalizedParams = params
+    val normalizedParams: Type = params match {
+      case Vector(param) => Type.Name(param.getType().asString())
+      case Vector(key, value) => t"(${Type.Name(key.getType().asString())}, ${Type.Name(value.getType().asString())})"
+    }
 
-    val genParam = param"${genField}: Gen[Option[Nothing]]"
+    val genParam = param"${genField}: Gen[Option[${normalizedParams}]]"
 
-    (genParam, genField, addOrSet)
+    (genParam, (genField, Term.Name(df.baseTerm)), addOrSet)
   }
 
   def walkNode(dirname: String, file: java.io.File): State[Set[com.github.javaparser.ast.`type`.Type], Unit] = {
@@ -256,7 +259,7 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
         typeDecl.getConstructors().asScala.foreach(println)
         val baseDefn = q"val base = ${Term.New(Init(Type.Name(typeDecl.getNameAsString), Name(""), Nil))}"
 
-        val nexts: State[Set[com.github.javaparser.ast.`type`.Type], Vector[(Term.Param, Term.Name, Stat)]] = for {
+        val nexts: State[Set[com.github.javaparser.ast.`type`.Type], Vector[(Term.Param, (Term.Name, Term.Name), Stat)]] = for {
           (fields, nextFiles) <- downFields
             .groupBy(_.guessBaseTerm)
             .mapValues(_.reduceLeft(Semigroup[DownField].combine _))
@@ -277,10 +280,26 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
           _ <- nextFiles.traverse(walkNode(dirname, _)) // Emits a vector of unit
         } yield fields
 
-        nexts.map((baseDefn, _))
+        nexts.map((typeDecl.getNameAsString, baseDefn, _))
     }).map({ case xs =>
-      xs.map { case (baseDefn, fields) =>
-        println(s"${baseDefn}: ${fields}")
+      xs.map { case (clsName, baseDefn, fields) =>
+        val (params, genAndTerms, setters) = fields.toList.unzip3
+        val (gens, terms) = genAndTerms.unzip
+        if (terms.length <= 1) {
+          println(s"WARNING: Not generating gen for ${clsName}")
+        } else {
+          val result = q"""
+          def ${Term.Name(s"gen${clsName}")}(..${params}): Gen[${Type.Name(clsName)}] = {
+            ${baseDefn}
+            Gen.zip(..${gens})
+              .map({ case (..${terms}) =>
+                ..${setters};
+                base
+              })
+          }
+          """
+          println(result)
+        }
       }
     })
   }
