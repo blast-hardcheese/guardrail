@@ -93,7 +93,9 @@ case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[
   }
 
   def baseTerm: String = {
-    guessBaseTerm.get
+    if (Term.Name(guessBaseTerm.get).toString.startsWith("`")) {
+      s"_${guessBaseTerm.get}"
+    } else guessBaseTerm.get
   }
 }
 
