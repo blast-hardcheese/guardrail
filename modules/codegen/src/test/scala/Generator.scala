@@ -294,7 +294,7 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
           def ${Term.Name(s"gen${clsName}")}(..${params}): Gen[${Type.Name(clsName)}] = {
             ${baseDefn}
             Gen.zip(..${gens})
-              .map({ case (..${terms}) =>
+              .map({ case (..${terms.map(Pat.Var(_))}) =>
                 ..${setters};
                 base
               })
