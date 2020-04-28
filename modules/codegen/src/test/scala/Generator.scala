@@ -124,48 +124,6 @@ object DownField {
 }
 
 object Generator {
-  val genOpenAPIVersion: Gen[OpenAPIVersion] = Gen.const(new OpenAPIVersion("3.0.2"))
-  val genOperation: Gen[Operation] = Gen.const(new Operation)
-  val genPathItem: Gen[PathItem] = Gen.const(new PathItem)
-  def genPaths(
-    genPathItem: Gen[Option[List[(String, PathItem)]]],
-    genExtensions: Gen[Option[OpenAPIExtensions]]
-  ): Gen[Paths] = {
-    val elem = new Paths
-    Gen.zip(genPathItem, genExtensions).map({ case (pathItems, extensions) =>
-pathItems                   .foreach(_.foreach((elem.addPathItem _ ).tupled))
-extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
-      elem
-    })
-  }
-
-  def genOpenAPI(
-    genComponents: Gen[Option[Components]],
-    genExtensions: Gen[Option[OpenAPIExtensions]],
-    genExternalDocs: Gen[Option[ExternalDocumentation]],
-    genInfo: Gen[Option[Info]],
-    genOpenapi: Gen[OpenAPIVersion],
-    genPaths: Gen[Option[Paths]],
-    genSecurity: Gen[Option[List[SecurityRequirement]]],
-    genServers: Gen[Option[List[Server]]],
-    genTags: Gen[Option[List[Tag]]]
-  ): Gen[OpenAPI] = {
-    val openAPI = new OpenAPI
-    Gen.zip(genComponents, genExtensions, genExternalDocs, genInfo, genOpenapi, genPaths, genSecurity, genServers, genTags)
-      .map({ case (components, extensions, externalDocs, info, openapi, paths, security, servers, tags) =>
-        openAPI.setComponents(components.orNull)
-        openAPI.setExtensions(extensions.map(_.extensions.asJava).orNull)
-        openAPI.setExternalDocs(externalDocs.orNull)
-        openAPI.setInfo(info.orNull)
-        openAPI.setOpenapi(openapi.version)
-        openAPI.setPaths(paths.orNull)
-        openAPI.setSecurity(security.map(_.asJava).orNull)
-        openAPI.setServers(servers.map(_.asJava).orNull)
-        openAPI.setTags(tags.map(_.asJava).orNull)
-        openAPI
-      })
-  }
-
   val lowercase: String => String = s => (s.take(1).toLowerCase ++ s.drop(1))
   val capitalize: String => String = s => (s.take(1).toUpperCase ++ s.drop(1))
 
