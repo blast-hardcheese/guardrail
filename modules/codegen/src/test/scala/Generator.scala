@@ -9,16 +9,6 @@ import org.scalacheck.Prop.forAll
 import scala.collection.JavaConverters._
 import scala.meta._
 
-import _root_.io.swagger.v3.oas.models.Components
-import _root_.io.swagger.v3.oas.models.ExternalDocumentation
-import _root_.io.swagger.v3.oas.models.OpenAPI
-import _root_.io.swagger.v3.oas.models.Operation
-import _root_.io.swagger.v3.oas.models.PathItem
-import _root_.io.swagger.v3.oas.models.Paths
-import _root_.io.swagger.v3.oas.models.info.Info
-import _root_.io.swagger.v3.oas.models.security.SecurityRequirement
-import _root_.io.swagger.v3.oas.models.servers.Server
-import _root_.io.swagger.v3.oas.models.tags.Tag
 import com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserTypeAdapter
 import com.github.javaparser.ast.`type`.{ Type => JPType }
 
