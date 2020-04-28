@@ -78,7 +78,7 @@ case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[
     case Ior.Right(b) => guessAll(b)
     case Ior.Both(a, b) => guessAll(a).intersect(guessAll(b))
   }).distinct.headOption.orElse {
-    println(s"Unable to come up with a decent base term for $methods")
+    println(s"// Unable to come up with a decent base term for $methods")
     None
   }
 
@@ -97,16 +97,16 @@ object DownField {
           case (Ior.Left(a), Ior.Right(b)) => Ior.both(a, b)
           case (Ior.Right(a), Ior.Left(b)) => Ior.both(b, a)
           case (a@Ior.Left(_), b) => Ior.both(a, b)
-            println(s"Warning, abandoning: $b")
+            println(s"// Warning, abandoning: $b")
             a
           case (a@Ior.Right(_), b) => Ior.both(b, a)
-            println(s"Warning, abandoning: $b")
+            println(s"// Warning, abandoning: $b")
             a
           case (a@Ior.Both(_, _), b) =>
-            println(s"Warning, abandoning: $b")
+            println(s"// Warning, abandoning: $b")
             a
           case (a, b@Ior.Both(_, _)) =>
-            println(s"Warning, abandoning: $a")
+            println(s"// Warning, abandoning: $a")
             b
         }, dependenciesA ++ dependenciesB)
     }
@@ -168,7 +168,7 @@ object Generator {
   }
 
   def walkNode(dirname: String, file: java.io.File): State[Set[com.github.javaparser.ast.`type`.Type], Unit] = {
-    println(s"walkNode(..., $file)")
+    println(s"// walkNode(..., $file)")
     import com.github.javaparser.JavaParser
 
     val javaParser = new JavaParser()
@@ -200,7 +200,7 @@ object Generator {
                 (List(other), List.empty)
             }
           case enum: com.github.javaparser.ast.body.EnumDeclaration =>
-            println(s"TODO: Not handling ${enum.getNameAsString()} yet")
+            println(s"// TODO: Not handling ${enum.getNameAsString()} yet")
             (Nil, Nil)
           case unknown =>
             // println(unknown.getClass)
@@ -243,7 +243,7 @@ object Generator {
         val (params, genAndTerms, setters) = fields.toList.unzip3
         val (gens, terms) = genAndTerms.unzip
         if (terms.length <= 1) {
-          println(s"WARNING: Not generating gen for ${clsName}")
+          println(s"// WARNING: Not generating gen for ${clsName}")
         } else {
           val result = q"""
           def ${Term.Name(s"gen${clsName}")}(..${params}): Gen[${Type.Name(clsName)}] = {
