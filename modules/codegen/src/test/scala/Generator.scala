@@ -35,9 +35,9 @@ object MethodDecl {
 }
 
 case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[(com.github.javaparser.ast.`type`.Type, String, PathSuffix)]) {
-  private[this] val addMethod = "^add(.*)$".r
-  private[this] val setMethod = "^set(.*)$".r
-  private[this] val getMethod = "^get(.*)$".r
+  private[this] val addMethod = "^add(.*?)s?$".r
+  private[this] val setMethod = "^set(.*?)s?$".r
+  private[this] val getMethod = "^get(.*?)s?$".r
   private[this] val lowercase: String => String = s => (s.take(1).toLowerCase ++ s.drop(1))
 
   private[this] def guessTypeName(tpe: JPType): String = {
@@ -173,9 +173,9 @@ object Generator {
 
     val javaParser = new JavaParser()
 
-    val addMethod = "^add(.*)$".r
-    val setMethod = "^set(.*)$".r
-    val getMethod = "^get(.*)$".r
+    val addMethod = "^add(.*?)s?$".r
+    val setMethod = "^set(.*?)s?$".r
+    val getMethod = "^get(.*?)s?$".r
 
     val rootParsed = javaParser.parse(file).getResult().get
     rootParsed.getTypes.asScala.toVector.traverse({
