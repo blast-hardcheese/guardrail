@@ -57,14 +57,14 @@ case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[
     Vector(method.name).flatMap {
       case addMethod(capped) =>
         val (elem, typeName) = method.params match {
-          case Vector(key, value) => (value, value.getType())
-          case Vector(value) => (value, value.getType())
+          case Vector(key, value) if !Set("Map", "List").contains(value.getType().getElementType().asString()) => (value, value.getType())
+          case Vector(value) if !Set("Map", "List").contains(value.getType().getElementType().asString()) => (value, value.getType())
           case other => throw new Exception(s"Unexpected $other params for 'add' $method")
         }
         Vector(lowercase(capped), elem.getName().asString(), lowercase(guessTypeName(typeName)))
       case setMethod(capped) =>
         val (elem, typeName) = method.params match {
-          case Vector(elem) => (elem, elem.getType())
+          case Vector(value) if !Set("Map", "List").contains(value.getType().getElementType().asString()) => (value, value.getType())
           case other => throw new Exception(s"Unexpected $other params for 'set' $method")
         }
         Vector(lowercase(capped), elem.getName().asString(), lowercase(guessTypeName(typeName)))
