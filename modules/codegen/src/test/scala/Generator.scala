@@ -113,6 +113,17 @@ object DownField {
   }
 }
 
+object GeneratorInterface {
+  type MethodSet = Ior[MethodDecl, MethodDecl]
+}
+
+abstract class GeneratorInterface[F[_]] {
+  import GeneratorInterface.MethodSet
+
+  def extractMethodSet(method: com.github.javaparser.ast.body.MethodDeclaration)(implicit impl: GeneratorInterface[F]): F[Vector[DownField]]
+  def getMembersFromClassDecl(classDecl: com.github.javaparser.ast.body.ClassOrInterfaceDeclaration)(implicit impl: GeneratorInterface[F]): F[Vector[DownField]]
+}
+
 object Generator {
   val lowercase: String => String = s => (s.take(1).toLowerCase ++ s.drop(1))
   val capitalize: String => String = s => (s.take(1).toUpperCase ++ s.drop(1))
@@ -167,52 +178,78 @@ object Generator {
     (genParam, (genField, Term.Name(df.baseTerm)), addOrSet)
   }
 
+  case class GenState(rootParsed: com.github.javaparser.ast.CompilationUnit)
+  type LocalState[A] = State[GenState, A]
+  val first = new GeneratorInterface[LocalState] {
+    import GeneratorInterface._
+    def extractMethodSet(method: com.github.javaparser.ast.body.MethodDeclaration)(implicit impl: GeneratorInterface[LocalState]): LocalState[Vector[DownField]] = {
+      val addMethod = "^add(.*?)s?$".r
+      val setMethod = "^set(.*?)s?$".r
+      val getMethod = "^get(.*?)s?$".r
+
+      method.getNameAsString() match {
+        case addMethod(_) =>
+          for {
+            state <- State.get[GenState]
+          } yield Vector(DownField(MethodDecl.fromMethod(method, Ior.right), getDeps(state.rootParsed)(method)))
+        case setMethod(_) =>
+          for {
+            state <- State.get[GenState]
+          } yield Vector(DownField(MethodDecl.fromMethod(method, Ior.left), getDeps(state.rootParsed)(method)))
+        case getMethod(_) =>
+          Vector.empty[DownField].pure[LocalState]
+        case "equals" | "hashCode" | "toString" | "toIndentedString" =>
+          Vector.empty[DownField].pure[LocalState]
+        case other =>
+          Vector.empty[DownField].pure[LocalState]
+      }
+    }
+
+    def getMembersFromClassDecl(typeDecl: com.github.javaparser.ast.body.ClassOrInterfaceDeclaration)(implicit impl: GeneratorInterface[LocalState]): LocalState[Vector[DownField]] = {
+      for {
+        downFields <- typeDecl.getMembers().asScala.toVector.flatTraverse({
+          case ctor: com.github.javaparser.ast.body.ConstructorDeclaration =>
+            Vector.empty[DownField].pure[LocalState]
+          case field: com.github.javaparser.ast.body.FieldDeclaration =>
+            Vector.empty[DownField].pure[LocalState]
+          case method: com.github.javaparser.ast.body.MethodDeclaration =>
+            impl.extractMethodSet(method)
+          case enum: com.github.javaparser.ast.body.EnumDeclaration =>
+            println(s"// TODO: Not handling ${enum.getNameAsString()} yet")
+            Vector.empty[DownField].pure[LocalState]
+          case unknown =>
+            Vector.empty[DownField].pure[LocalState]
+        })
+      } yield {
+        downFields
+          .groupBy(_.guessBaseTerm)
+          .mapValues(_.reduceLeft(Semigroup[DownField].combine _))
+          .values
+          .toVector
+      }
+    }
+  }
+
+  implicit val generatorInterface = new GeneratorInterface[LocalState] {
+    def extractMethodSet(method: com.github.javaparser.ast.body.MethodDeclaration)(implicit impl: GeneratorInterface[LocalState]) = {
+      println(s"Chained")
+      first.extractMethodSet(method)
+    }
+    def getMembersFromClassDecl(typeDecl: com.github.javaparser.ast.body.ClassOrInterfaceDeclaration)(implicit impl: GeneratorInterface[LocalState]) = first.getMembersFromClassDecl(typeDecl)
+  }
+
   def walkNode(dirname: String, file: java.io.File): State[Set[com.github.javaparser.ast.`type`.Type], Unit] = {
     println(s"// walkNode(..., $file)")
     import com.github.javaparser.JavaParser
 
     val javaParser = new JavaParser()
 
-    val addMethod = "^add(.*?)s?$".r
-    val setMethod = "^set(.*?)s?$".r
-    val getMethod = "^get(.*?)s?$".r
-
     val rootParsed = javaParser.parse(file).getResult().get
     rootParsed.getTypes.asScala.toVector.traverse({
       case typeDecl: com.github.javaparser.ast.body.ClassOrInterfaceDeclaration =>
         for {
-          (fields, nextFiles) <- 
-            typeDecl.getMembers().asScala.toList.flatMap({
-              case ctor: com.github.javaparser.ast.body.ConstructorDeclaration =>
-                Nil
-              case field: com.github.javaparser.ast.body.FieldDeclaration =>
-                Nil
-              case method: com.github.javaparser.ast.body.MethodDeclaration =>
-                method.getNameAsString() match {
-                  case addMethod(properPropertyName) =>
-                    List(DownField(MethodDecl.fromMethod(method, Ior.right), getDeps(rootParsed)(method)))
-                  case setMethod(properPropertyName) =>
-                    List(DownField(MethodDecl.fromMethod(method, Ior.left), getDeps(rootParsed)(method)))
-                  case getMethod(properPropertyName) =>
-                    Nil
-                  case "equals" | "hashCode" | "toString" | "toIndentedString" =>
-                    Nil
-                  case other =>
-                    // println(s"  Unexpected method name: ${other}")
-                    List.empty
-                }
-              case enum: com.github.javaparser.ast.body.EnumDeclaration =>
-                println(s"// TODO: Not handling ${enum.getNameAsString()} yet")
-                Nil
-              case unknown =>
-                // println(unknown.getClass)
-                // println(unknown)
-                Nil
-            })
-            .groupBy(_.guessBaseTerm)
-            .mapValues(_.reduceLeft(Semigroup[DownField].combine _))
-            .values
-            .toVector
+          (fields, nextFiles) <-
+            generatorInterface.getMembersFromClassDecl(typeDecl).runA(GenState(rootParsed)).value
             .flatTraverse({ case df@DownField(methods, dependencies) =>
 
               val field = genFromDownField(q"base")(df)
