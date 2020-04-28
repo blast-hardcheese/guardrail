@@ -180,36 +180,35 @@ object Generator {
     val rootParsed = javaParser.parse(file).getResult().get
     rootParsed.getTypes.asScala.toVector.traverse({
       case typeDecl: com.github.javaparser.ast.body.ClassOrInterfaceDeclaration =>
-        val downFields = typeDecl.getMembers().asScala.toList.flatMap({
-          case ctor: com.github.javaparser.ast.body.ConstructorDeclaration =>
-            Nil
-          case field: com.github.javaparser.ast.body.FieldDeclaration =>
-            Nil
-          case method: com.github.javaparser.ast.body.MethodDeclaration =>
-            method.getNameAsString() match {
-              case addMethod(properPropertyName) =>
-                List(DownField(MethodDecl.fromMethod(method, Ior.right), getDeps(rootParsed)(method)))
-              case setMethod(properPropertyName) =>
-                List(DownField(MethodDecl.fromMethod(method, Ior.left), getDeps(rootParsed)(method)))
-              case getMethod(properPropertyName) =>
-                Nil
-              case "equals" | "hashCode" | "toString" | "toIndentedString" =>
-                Nil
-              case other =>
-                // println(s"  Unexpected method name: ${other}")
-                List.empty
-            }
-          case enum: com.github.javaparser.ast.body.EnumDeclaration =>
-            println(s"// TODO: Not handling ${enum.getNameAsString()} yet")
-            Nil
-          case unknown =>
-            // println(unknown.getClass)
-            // println(unknown)
-            Nil
-        })
-
         for {
-          (fields, nextFiles) <- downFields
+          (fields, nextFiles) <- 
+            typeDecl.getMembers().asScala.toList.flatMap({
+              case ctor: com.github.javaparser.ast.body.ConstructorDeclaration =>
+                Nil
+              case field: com.github.javaparser.ast.body.FieldDeclaration =>
+                Nil
+              case method: com.github.javaparser.ast.body.MethodDeclaration =>
+                method.getNameAsString() match {
+                  case addMethod(properPropertyName) =>
+                    List(DownField(MethodDecl.fromMethod(method, Ior.right), getDeps(rootParsed)(method)))
+                  case setMethod(properPropertyName) =>
+                    List(DownField(MethodDecl.fromMethod(method, Ior.left), getDeps(rootParsed)(method)))
+                  case getMethod(properPropertyName) =>
+                    Nil
+                  case "equals" | "hashCode" | "toString" | "toIndentedString" =>
+                    Nil
+                  case other =>
+                    // println(s"  Unexpected method name: ${other}")
+                    List.empty
+                }
+              case enum: com.github.javaparser.ast.body.EnumDeclaration =>
+                println(s"// TODO: Not handling ${enum.getNameAsString()} yet")
+                Nil
+              case unknown =>
+                // println(unknown.getClass)
+                // println(unknown)
+                Nil
+            })
             .groupBy(_.guessBaseTerm)
             .mapValues(_.reduceLeft(Semigroup[DownField].combine _))
             .values
