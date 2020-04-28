@@ -56,18 +56,18 @@ case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[
   private[this] def guessAll(method: MethodDecl): Vector[String] = {
     Vector(method.name).flatMap {
       case addMethod(capped) =>
-        val typeName = method.params match {
-          case Vector(key, value) => guessTypeName(value.getType())
-          case Vector(value) => guessTypeName(value.getType())
+        val (elem, typeName) = method.params match {
+          case Vector(key, value) => (value, value.getType())
+          case Vector(value) => (value, value.getType())
           case other => throw new Exception(s"Unexpected $other params for 'add' $method")
         }
-        Vector(lowercase(typeName), lowercase(capped))
+        Vector(lowercase(capped), elem.getName().asString(), lowercase(guessTypeName(typeName)))
       case setMethod(capped) =>
-        val typeName = method.params match {
-          case Vector(elem) => guessTypeName(elem.getType())
+        val (elem, typeName) = method.params match {
+          case Vector(elem) => (elem, elem.getType())
           case other => throw new Exception(s"Unexpected $other params for 'set' $method")
         }
-        Vector(lowercase(typeName), lowercase(capped))
+        Vector(lowercase(capped), elem.getName().asString(), lowercase(guessTypeName(typeName)))
       case getMethod(capped) =>
         throw new Exception(s"Unexpected 'get' for ${method}")
     }
