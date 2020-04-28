@@ -241,22 +241,35 @@ object Generator {
     }).map({ case xs =>
       xs.map { case (clsName, baseDefn, fields) =>
         val (params, genAndTerms, setters) = fields.toList.unzip3
-        val (gens, terms) = genAndTerms.unzip
-        if (terms.length <= 1) {
-          println(s"// WARNING: Not generating gen for ${clsName}")
-        } else {
-          val result = q"""
-          def ${Term.Name(s"gen${clsName}")}(..${params}): Gen[${Type.Name(clsName)}] = {
-            ${baseDefn}
-            Gen.zip(..${gens})
-              .map({ case (..${terms.map(Pat.Var(_))}) =>
-                ..${setters};
-                base
-              })
-          }
-          """
-          println(result)
+        val result =
+        genAndTerms.unzip match {
+          case (Nil, Nil) =>
+            println(s"// WARNING: Not generating gen for ${clsName}")
+          case (gen :: Nil, term :: Nil) =>
+            q"""
+            def ${Term.Name(s"gen${clsName}")}(..${params}): Gen[${Type.Name(clsName)}] = {
+              ${baseDefn}
+              ${gen}
+                .map({ ${Term.Param(Nil, term, None, None)} =>
+                  ..${setters};
+                  base
+                })
+            }
+            """
+          case (gens, terms) =>
+            q"""
+            def ${Term.Name(s"gen${clsName}")}(..${params}): Gen[${Type.Name(clsName)}] = {
+              ${baseDefn}
+              Gen.zip(..${gens})
+                .map({ case (..${terms.map(Pat.Var(_))}) =>
+                  ..${setters};
+                  base
+                })
+            }
+            """
         }
+
+        println(result)
       }
     })
   }
