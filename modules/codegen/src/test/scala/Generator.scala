@@ -218,7 +218,6 @@ object Generator {
             (Nil, Nil)
         })
 
-        typeDecl.getConstructors().asScala.foreach(println)
         val baseDefn = q"val base = ${Term.New(Init(Type.Name(typeDecl.getNameAsString), Name(""), Nil))}"
 
         val nexts: State[Set[com.github.javaparser.ast.`type`.Type], Vector[(Term.Param, (Term.Name, Term.Name), Stat)]] = for {
