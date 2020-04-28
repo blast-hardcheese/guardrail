@@ -180,37 +180,35 @@ object Generator {
     val rootParsed = javaParser.parse(file).getResult().get
     rootParsed.getTypes.asScala.toVector.traverse({
       case typeDecl: com.github.javaparser.ast.body.ClassOrInterfaceDeclaration =>
-        val (others, downFields) = typeDecl.getMembers().asScala.toList.flatTraverse({
+        val downFields = typeDecl.getMembers().asScala.toList.flatMap({
           case ctor: com.github.javaparser.ast.body.ConstructorDeclaration =>
-            (Nil, Nil)
+            Nil
           case field: com.github.javaparser.ast.body.FieldDeclaration =>
-            (Nil, Nil)
+            Nil
           case method: com.github.javaparser.ast.body.MethodDeclaration =>
             method.getNameAsString() match {
               case addMethod(properPropertyName) =>
-                (Nil, List(DownField(MethodDecl.fromMethod(method, Ior.right), getDeps(rootParsed)(method))))
+                List(DownField(MethodDecl.fromMethod(method, Ior.right), getDeps(rootParsed)(method)))
               case setMethod(properPropertyName) =>
-                (Nil, List(DownField(MethodDecl.fromMethod(method, Ior.left), getDeps(rootParsed)(method))))
+                List(DownField(MethodDecl.fromMethod(method, Ior.left), getDeps(rootParsed)(method)))
               case getMethod(properPropertyName) =>
-                (Nil, Nil)
+                Nil
               case "equals" | "hashCode" | "toString" | "toIndentedString" =>
-                (Nil, Nil)
+                Nil
               case other =>
                 // println(s"  Unexpected method name: ${other}")
-                (List(other), List.empty)
+                List.empty
             }
           case enum: com.github.javaparser.ast.body.EnumDeclaration =>
             println(s"// TODO: Not handling ${enum.getNameAsString()} yet")
-            (Nil, Nil)
+            Nil
           case unknown =>
             // println(unknown.getClass)
             // println(unknown)
-            (Nil, Nil)
+            Nil
         })
 
-        val baseDefn = q"val base = ${Term.New(Init(Type.Name(typeDecl.getNameAsString), Name(""), Nil))}"
-
-        val nexts: State[Set[com.github.javaparser.ast.`type`.Type], Vector[(Term.Param, (Term.Name, Term.Name), Stat)]] = for {
+        for {
           (fields, nextFiles) <- downFields
             .groupBy(_.guessBaseTerm)
             .mapValues(_.reduceLeft(Semigroup[DownField].combine _))
@@ -235,9 +233,8 @@ object Generator {
               }).map((Vector(field), _)))
             }).value
           _ <- nextFiles.traverse(walkNode(dirname, _)) // Emits a vector of unit
-        } yield fields
-
-        nexts.map((typeDecl.getNameAsString, baseDefn, _))
+          baseDefn = q"val base = ${Term.New(Init(Type.Name(typeDecl.getNameAsString), Name(""), Nil))}"
+        } yield (typeDecl.getNameAsString, baseDefn, fields)
     }).map({ case xs =>
       xs.map { case (clsName, baseDefn, fields) =>
         val (params, genAndTerms, setters) = fields.toList.unzip3
