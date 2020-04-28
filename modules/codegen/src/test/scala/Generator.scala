@@ -44,7 +44,7 @@ object MethodDecl {
   }
 }
 
-case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[(com.github.javaparser.ast.`type`.Type, PathSuffix)]) {
+case class DownField(methods: Ior[MethodDecl, MethodDecl], dependencies: Vector[(com.github.javaparser.ast.`type`.Type, String, PathSuffix)]) {
   private[this] val addMethod = "^add(.*)$".r
   private[this] val setMethod = "^set(.*)$".r
   private[this] val getMethod = "^get(.*)$".r
@@ -169,16 +169,18 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
   val lowercase: String => String = s => (s.take(1).toLowerCase ++ s.drop(1))
   val capitalize: String => String = s => (s.take(1).toUpperCase ++ s.drop(1))
 
-  def guessPath(pkg: String, imports: Map[String, String])(tpe: JPType): (JPType, PathSuffix) = {
-    val suffix = (tpe.getElementType().asString().split('.').toList match {
+  def guessPath(pkg: String, imports: Map[String, String])(tpe: JPType): (JPType, String, PathSuffix) = {
+    val parts = tpe.getElementType().asString().split('.').toList match {
       case clsName :: Nil => imports.getOrElse(clsName, s"${pkg}.${clsName}").split('.').toList
       case fullyQualified => fullyQualified
-    }).mkString("/") + ".java"
+    }
+    val fullyQualified = parts.mkString(".")
+    val suffix = parts.mkString("/") + ".java"
 
-    (tpe, new PathSuffix(suffix))
+    (tpe, fullyQualified, new PathSuffix(suffix))
   }
 
-  def getDeps(rootParsed: com.github.javaparser.ast.CompilationUnit): com.github.javaparser.ast.body.MethodDeclaration => Vector[(JPType, PathSuffix)] = { method =>
+  def getDeps(rootParsed: com.github.javaparser.ast.CompilationUnit): com.github.javaparser.ast.body.MethodDeclaration => Vector[(JPType, String, PathSuffix)] = { method =>
     val pkg = rootParsed.getPackageDeclaration().get().getNameAsString()
     val imports = rootParsed.getImports().asScala.toVector.map(_.getNameAsString()).map(i => i.split('.').last -> i).toMap
 
@@ -271,11 +273,17 @@ extensions.map(_.extensions).foreach(_.foreach((elem.addExtension _).tupled))
 
               val field = genFromDownField(q"base")(df)
 
-              Nested(dependencies.flatTraverse({ case (tpe, PathSuffix(suffix)) =>
+              Nested(dependencies.flatTraverse({ case (tpe, fullyQualified, PathSuffix(suffix)) =>
                 for {
                   seen <- State.get[Set[com.github.javaparser.ast.`type`.Type]]
-                  res = if (seen contains tpe) Vector.empty else Vector(new java.io.File(dirname, suffix)).filter(_.isFile())
-                  _ <- State.set[Set[com.github.javaparser.ast.`type`.Type]](seen + tpe)
+                  path = Option(new java.io.File(dirname, suffix)).filter(_.isFile())
+                  res <- path.filterNot(_ => seen.contains(tpe)).toVector.flatTraverse { file =>
+                    State.set[Set[com.github.javaparser.ast.`type`.Type]](seen + tpe)
+                      .map { _ =>
+                        println(s"import _root_.${fullyQualified}")
+                        Vector(file)
+                      }
+                    }
                 } yield res
               }).map((Vector(field), _)))
             }).value
