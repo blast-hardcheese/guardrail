@@ -3,7 +3,7 @@ package com.twilio.guardrail.core
 import cats.data.{ Chain, NonEmptyChain }
 import cats.implicits._
 import cats.{ Monoid, Order, Show }
-import org.slf4j.{ Logger, LoggerFactory }
+import org.slf4j.LoggerFactory
 
 sealed abstract class LogLevel(val level: String)
 object LogLevel {
@@ -50,7 +50,6 @@ case class StructuredLogger(entries: Chain[StructuredLogEntry]) {
 }
 
 object StructuredLogger extends StructuredLoggerInstances {
-  val logger = LoggerFactory.getLogger("guardrail")
   def push(next: String): StructuredLogger = StructuredLogger(StructuredLoggerPush(next).pure[Chain])
   def pop: StructuredLogger                = StructuredLogger(StructuredLoggerPop.pure[Chain])
   def reset: StructuredLogger              = StructuredLogger(StructuredLoggerReset.pure[Chain])
@@ -71,6 +70,8 @@ object StructuredLogger extends StructuredLoggerInstances {
             .toVector
             .foreach({
               case (level, message) =>
+                val history = Option(newHistory.toVector).filter(_.nonEmpty).getOrElse(Vector("<root>")).mkString(" ")
+                val logger = LoggerFactory.getLogger(history)
                 val emitter: String => Unit = level match {
                   case LogLevels.Debug   => logger.debug(_: String)
                   case LogLevels.Info    => logger.info(_: String)
@@ -78,13 +79,7 @@ object StructuredLogger extends StructuredLoggerInstances {
                   case LogLevels.Error   => logger.error(_: String)
                   case LogLevels.Silent  => (_: String) => ()
                 }
-                val history = Option(newHistory.toVector).filter(_.nonEmpty).getOrElse(Vector("<root>")).mkString(" ")
-                val formatted  = {
-                  val lines = message.linesIterator
-                  val padding = " " * history.length
-                  (lines.take(1).map(history + _) ++ lines.map(padding + _)).mkString("\n")
-                }
-                emitter(formatted)
+                emitter(message)
             })
           newHistory
       })
@@ -92,7 +87,6 @@ object StructuredLogger extends StructuredLoggerInstances {
 }
 
 sealed trait StructuredLoggerInstances {
-  val logger: Logger
   implicit object StructuredLoggerMonoid extends Monoid[StructuredLogger] {
     def empty: StructuredLogger                                             = StructuredLogger(Chain.empty)
     def combine(x: StructuredLogger, y: StructuredLogger): StructuredLogger = StructuredLogger(Monoid[Chain[StructuredLogEntry]].combine(x.entries, y.entries))
