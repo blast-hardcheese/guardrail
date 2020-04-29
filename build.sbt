@@ -173,6 +173,7 @@ addCommandAlias("example", "runtimeSuite")
 // Make "cli" not emit unhandled exceptions on exit
 fork in run := true
 
+javaOptions += "-Dorg.slf4j.simpleLogger.log.com.twilio.guardrail=debug"
 addCommandAlias("cli", "runMain com.twilio.guardrail.CLI")
 addCommandAlias("runtimeScalaSuite", "; resetSample ; runScalaExample ; " + scalaFrameworks.map(x => s"${x}Sample/test").mkString("; "))
 addCommandAlias("runtimeJavaSuite", "; resetSample ; runJavaExample ; " + javaFrameworks.map(x => s"${x}Sample/test").mkString("; "))

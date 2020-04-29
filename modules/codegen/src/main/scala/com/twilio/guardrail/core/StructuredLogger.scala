@@ -70,7 +70,7 @@ object StructuredLogger extends StructuredLoggerInstances {
             .toVector
             .foreach({
               case (level, message) =>
-                val history = Option(newHistory.toVector).filter(_.nonEmpty).getOrElse(Vector("<root>")).mkString(" ")
+                val history = ("com.twilio.guardrail.interp" +: newHistory.toVector).mkString(".")
                 val logger = LoggerFactory.getLogger(history)
                 val emitter: String => Unit = level match {
                   case LogLevels.Debug   => logger.debug(_: String)
