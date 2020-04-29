@@ -138,7 +138,7 @@ trait CLICommon {
         identity
       )
 
-    println(result.logEntries.show)
+    StructuredLogger.toLogger(result.logEntries)
 
     if (paths.isEmpty) {
       CommandLineResult.failure
