@@ -88,6 +88,8 @@ trait CLICommon {
         guardrailRunner(args.map(language -> _).toMap)
       })
 
+    StructuredLogger.toLogger(result.logEntries)
+
     val fallback = List.empty[Path]
     import CLICommon.unsafePrintHelp
     val paths = result
@@ -137,8 +139,6 @@ trait CLICommon {
         },
         identity
       )
-
-    StructuredLogger.toLogger(result.logEntries)
 
     if (paths.isEmpty) {
       CommandLineResult.failure
