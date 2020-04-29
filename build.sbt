@@ -204,6 +204,10 @@ scalacOptions += "-Yrangepos"
 
 publishMavenStyle := true
 
+val runtimeDependencies = Seq(
+  "org.slf4j" % "slf4j-simple" % "1.8.0-beta4" % "runtime"
+)
+
 val testDependencies = Seq(
   "org.scalatest" %% "scalatest" % scalatestVersion % Test,
   "org.scalacheck" %% "scalacheck" % scalacheckVersion % Test,
@@ -238,7 +242,7 @@ val codegenSettings = Seq(
 
 lazy val root = (project in file("."))
   .settings(
-    libraryDependencies ++= testDependencies,
+    libraryDependencies ++= testDependencies ++ runtimeDependencies,
     skip in publish := true
   )
   .dependsOn(codegen % "compile;test", microsite % "compile; test")
@@ -247,7 +251,7 @@ lazy val codegen = (project in file("modules/codegen"))
   .settings(
     (name := "guardrail") +:
       codegenSettings,
-    libraryDependencies ++= testDependencies ++ Seq(
+    libraryDependencies ++= testDependencies ++ runtimeDependencies ++ Seq(
       "org.scalameta"               %% "scalameta"                    % "4.3.10",
       "com.github.javaparser"       % "javaparser-symbol-solver-core" % javaparserVersion,
       "org.eclipse.jdt"             % "org.eclipse.jdt.core"          % "3.19.0",
