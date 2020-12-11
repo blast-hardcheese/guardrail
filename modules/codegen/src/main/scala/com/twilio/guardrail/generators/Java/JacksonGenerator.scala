@@ -324,6 +324,7 @@ object JacksonGenerator {
       extends ModelProtocolTerms[JavaLanguage, Target] {
 
     implicit def MonadF: Monad[Target] = Target.targetInstances
+    def raiseUserError[A](s: String) = Target.raiseUserError[A](s)
 
     def renderDTOClass(
         clsName: String,
@@ -760,25 +761,6 @@ object JacksonGenerator {
 
       } yield dtoClass
     }
-
-    def extractProperties(swagger: Tracker[Schema[_]]) =
-      swagger
-        .refine({ case m: ObjectSchema => m })(m => Target.pure(m.downField("properties", _.getProperties()).indexedCosequence.value))
-        .orRefine({ case c: ComposedSchema => c })(
-          comp =>
-            Target.pure(
-              comp
-                .downField("allOf", _.getAllOf())
-                .indexedDistribute
-                .lastOption
-                .toList
-                .flatMap(_.downField("properties", _.getProperties).indexedCosequence.value.toList)
-            )
-        )
-        .orRefine({ case x: Schema[_] if Option(x.get$ref()).isDefined => x })(
-          comp => Target.raiseUserError(s"Attempted to extractProperties for a ${comp.get.getClass()}, unsure what to do here (${comp.showHistory})")
-        )
-        .getOrElse(Target.pure(List.empty[(String, Tracker[Schema[_]])]))
 
     def transformProperty(
         clsName: String,

@@ -1,16 +1,19 @@
 package com.twilio.guardrail.protocol.terms.protocol
 
 import cats.Monad
+import cats.implicits._
 import com.twilio.guardrail.SwaggerUtil.ResolvedType
 import com.twilio.guardrail.core.Tracker
 import com.twilio.guardrail.languages.LA
 import com.twilio.guardrail.terms.CollectionsLibTerms
 import com.twilio.guardrail.{ ProtocolParameter, StaticDefns, SuperClass }
-import io.swagger.v3.oas.models.media.Schema
+import io.swagger.v3.oas.models.media.{ Schema, ObjectSchema, ComposedSchema }
 
 abstract class ModelProtocolTerms[L <: LA, F[_]](implicit Cl: CollectionsLibTerms[L, F]) {
+  private val _this = this
   def MonadF: Monad[F]
-  def extractProperties(swagger: Tracker[Schema[_]]): F[List[(String, Tracker[Schema[_]])]]
+  def raiseUserError[A](str: String): F[A]
+
   def transformProperty(
       clsName: String,
       dtoPackage: List[String],
@@ -41,6 +44,23 @@ abstract class ModelProtocolTerms[L <: LA, F[_]](implicit Cl: CollectionsLibTerm
   ): F[Option[L#ValueDefinition]]
   def renderDTOStaticDefns(clsName: String, deps: List[L#TermName], encoder: Option[L#ValueDefinition], decoder: Option[L#ValueDefinition]): F[StaticDefns[L]]
 
+  def extractProperties(swagger: Tracker[Schema[_]]) =
+    MonadF.map(
+      swagger
+        .refine[F[List[(String, Tracker[Schema[_]])]]]({ case o: ObjectSchema => o })(
+          m => MonadF.pure(m.downField("properties", _.getProperties).indexedCosequence.value)
+        )
+        .orRefine({ case c: ComposedSchema => c })({ comp =>
+          val extractedProps =
+            comp.downField("allOf", _.getAllOf()).indexedDistribute.flatMap(_.downField("properties", _.getProperties).indexedCosequence.value)
+          MonadF.pure(extractedProps)
+        })
+        .orRefine({ case x: Schema[_] if Option(x.get$ref()).isDefined => x })(
+          comp => raiseUserError(s"Attempted to extractProperties for a ${comp.get.getClass()}, unsure what to do here (${comp.showHistory})")
+        )
+        .getOrElse(MonadF.pure(List.empty))
+    )(_.toList)
+
   def copy(
       newMonadF: Monad[F] = MonadF,
       newExtractProperties: Tracker[Schema[_]] => F[List[(String, Tracker[Schema[_]])]] = extractProperties _,
@@ -56,7 +76,8 @@ abstract class ModelProtocolTerms[L <: LA, F[_]](implicit Cl: CollectionsLibTerm
       newRenderDTOStaticDefns: (String, List[L#TermName], Option[L#ValueDefinition], Option[L#ValueDefinition]) => F[StaticDefns[L]] = renderDTOStaticDefns _
   ) = new ModelProtocolTerms[L, F] {
     def MonadF                                         = newMonadF
-    def extractProperties(swagger: Tracker[Schema[_]]) = newExtractProperties(swagger)
+    def raiseUserError[A](str: String): F[A]           = _this.raiseUserError(str)
+    override def extractProperties(swagger: Tracker[Schema[_]]) = newExtractProperties(swagger)
     def transformProperty(
         clsName: String,
         dtoPackage: List[String],
