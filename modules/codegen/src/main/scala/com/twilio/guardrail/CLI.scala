@@ -5,7 +5,7 @@ import cats.data.NonEmptyList
 import cats.implicits._
 import com.twilio.guardrail.core.{ CoreTermInterp, LogLevel, LogLevels, StructuredLogger }
 import com.twilio.guardrail.terms.CoreTerms
-import com.twilio.guardrail.languages.{ JavaLanguage, LA, ScalaLanguage }
+import com.twilio.guardrail.languages.{ JavaLanguage, LA, PythonLanguage, ScalaLanguage }
 import scala.io.AnsiColor
 import scala.util.{ Failure, Success }
 
@@ -50,6 +50,7 @@ object CLICommon {
 }
 
 trait CLICommon {
+  implicit def pythonInterpreter: CoreTerms[PythonLanguage, Target]
   implicit def scalaInterpreter: CoreTerms[ScalaLanguage, Target]
   implicit def javaInterpreter: CoreTerms[JavaLanguage, Target]
 
@@ -59,8 +60,9 @@ trait CLICommon {
   }
 
   def handleLanguage: PartialFunction[String, Array[String] => CommandLineResult] = {
-    case "java"  => run("java", _)(javaInterpreter)
-    case "scala" => run("scala", _)(scalaInterpreter)
+    case "java"   => run("java", _)(javaInterpreter)
+    case "python" => run("python", _)(pythonInterpreter)
+    case "scala"  => run("scala", _)(scalaInterpreter)
   }
 
   def run[L <: LA](language: String, args: Array[String])(interpreter: CoreTerms[L, Target]): CommandLineResult = {
@@ -156,6 +158,8 @@ trait CLICommon {
         (language match {
           case "java" =>
             Common.runM[JavaLanguage, Target](args)
+          case "python" =>
+            Common.runM[PythonLanguage, Target](args)
           case "scala" =>
             Common.runM[ScalaLanguage, Target](args)
           case other =>
@@ -183,8 +187,18 @@ trait CLICommon {
 }
 
 object CLI extends CLICommon {
-  import com.twilio.guardrail.generators.{ Java, JavaModule, Scala, ScalaModule }
+  import com.twilio.guardrail.generators.{ Java, JavaModule, Python, PythonModule, Scala, ScalaModule }
   import scala.meta._
+  val pythonInterpreter = new CoreTermInterp[PythonLanguage](
+    "requests",
+    PythonModule.extract, {
+      case "requests"        => Python.Requests
+    }, {
+      import com.twilio.guardrail.languages.python
+      value => Right(python.Import(value))
+    }
+  )
+
   val scalaInterpreter = new CoreTermInterp[ScalaLanguage](
     "akka-http",
     ScalaModule.extract, {

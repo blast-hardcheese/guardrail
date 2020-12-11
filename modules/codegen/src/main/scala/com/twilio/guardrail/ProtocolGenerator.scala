@@ -12,8 +12,8 @@ import com.twilio.guardrail.languages.LA
 import com.twilio.guardrail.protocol.terms.protocol._
 import com.twilio.guardrail.terms.framework.FrameworkTerms
 import com.twilio.guardrail.terms.{ CollectionsLibTerms, LanguageTerms, SwaggerTerms }
+import com.twilio.guardrail.extract.{ DataRedaction, Default, EmptyValueIsNull }
 import cats.Foldable
-import com.twilio.guardrail.extract.Default
 import scala.collection.JavaConverters._
 import scala.language.higherKinds
 import com.twilio.guardrail.generators.RawParameterName
@@ -165,6 +165,107 @@ object ProtocolGenerator {
       case (false, Some(false)) => PropertyRequirement.Optional
       case (false, Some(true))  => PropertyRequirement.OptionalNullable
     }).get
+
+//  def lookupTypeName[L <: LA](tpeName: String, concreteTypes: List[PropMeta[L]])(f: L#Type => L#Type): Option[L#Type] =
+//    concreteTypes
+//      .find(_.clsName == tpeName)
+//      .map(_.tpe)
+//      .map(f)
+//
+//  def transformProperty[L <: LA, F[_]](
+//      clsName: String,
+//      dtoPackage: List[String],
+//      supportPackage: List[String],
+//      concreteTypes: List[PropMeta[L]]
+//  )(
+//      name: String,
+//      fieldName: String,
+//      property: Schema[_],
+//      meta: SwaggerUtil.ResolvedType[L],
+//      requirement: PropertyRequirement,
+//      isCustomType: Boolean,
+//      defaultValue: Option[com.github.javaparser.ast.Node]
+//  )(implicit
+//    Cl: CollectionsLibTerms[L, F],
+//    Sc: LanguageTerms[L, F],
+//    Sw: SwaggerTerms[L, F]
+//  ) =
+//    Sw.log.function("transformProperty") {
+//      import Sc._
+//      val readOnlyKey = Option(name).filter(_ => Option(property.getReadOnly).contains(true))
+//      val emptyToNull = (property match {
+//        case d: DateSchema      => EmptyValueIsNull(d)
+//        case dt: DateTimeSchema => EmptyValueIsNull(dt)
+//        case s: StringSchema    => EmptyValueIsNull(s)
+//        case _                  => None
+//      }).getOrElse(EmptyIsEmpty)
+//      val dataRedaction = DataRedaction(property).getOrElse(DataVisible)
+//      for {
+//        tpeClassDep <- (meta match {
+//          case SwaggerUtil.Resolved(declType, classDep, _, _, _) =>
+//            Monad[F].pure((declType, classDep))
+//          case SwaggerUtil.Deferred(tpeName) =>
+//            concreteTypes
+//              .find(_.clsName == tpeName)
+//              .map(x => Monad[F].pure((x.tpe, Option.empty[L#TermName])))
+//              .getOrElse {
+//                for {
+//                  _ <- Sw.log.info(s"Unable to find definition for ${tpeName}, just inlining")
+//                  tpe <- parseType(tpeName)
+//                } yield (tpe.get, Option.empty)
+//              }
+//          case SwaggerUtil.DeferredArray(tpeName, containerTpe) =>
+//            val concreteType = lookupTypeName(tpeName, concreteTypes)(identity _)
+//            for {
+//              innerType <- concreteType.fold(parseType(tpeName))(x => Monad[F].pure(Option(x)))
+//              tpe       <- Cl.liftVectorType(innerType.get, containerTpe)
+//            } yield (tpe, Option.empty)
+//          case SwaggerUtil.DeferredMap(tpeName, containerTpe) =>
+//            val concreteType = lookupTypeName(tpeName, concreteTypes)(identity _)
+//            for {
+//              innerType <- concreteType.fold(parseType(tpeName))(x => Monad[F].pure(Option(x)))
+//              tpe       <- Cl.liftMapType(innerType.get, containerTpe)
+//            } yield (tpe, Option.empty)
+//        }): F[(L#Type, Option[L#TermName])]
+//        (tpe, classDep) = tpeClassDep
+//
+//        rawType = RawParameterType(Option(property.getType), Option(property.getFormat))
+//
+//        expressionDefaultValue <- defaultValue match {
+//          case Some(e: Expression) => Monad[F].pure(Some(e))
+//          case Some(_) =>
+//            for {
+//              _ <- Sw.log.warning(s"Can't generate default value for class $clsName and property $name.")
+//            } yield None
+//          case None => Monad[F].pure(None)
+//        }
+//        finalDefaultTypeValue <- Option(requirement)
+//          .filter {
+//            case PropertyRequirement.Required => true
+//            case _                            => false
+//          }
+//          .fold[Target[(Type, Option[Expression])]](
+//            for {
+//              optionalTpe      <- Cl.liftOptionalType(tpe)
+//              defaultValueExpr <- defaultValue.fold(Target.pure(Option.empty[Expression]))(dv => dv.toExpression.map(Option.apply))
+//            } yield (optionalTpe, defaultValueExpr)
+//          )(Function.const(Target.pure((tpe, expressionDefaultValue))) _)
+//        (finalDeclType, finalDefaultValue) = finalDefaultTypeValue
+//        term <- safeParseParameter(s"final ${finalDeclType} $fieldName")
+//        dep = classDep.filterNot(_.asString == clsName) // Filter out our own class name
+//      } yield ProtocolParameter[L](
+//        term,
+//        finalDeclType,
+//        RawParameterName(name),
+//        dep,
+//        rawType,
+//        readOnlyKey,
+//        emptyToNull,
+//        dataRedaction,
+//        requirement,
+//        finalDefaultValue
+//      )
+//    }
 
   /**
     * Handle polymorphic model
