@@ -302,7 +302,7 @@ object CirceProtocolGenerator {
             q"a.${Term.Name(param.term.name.value)}.fold(ifAbsent = None, ifPresent = value => Some($name -> value.asJson))"
           }
 
-          val allFields: List[Either[Term.Apply, Term.Tuple]] = params.map { param =>
+          val (optional, pairs) = params.partitionEither { param =>
             val name = Lit.String(param.name.value)
             param.propertyRequirement match {
               case PropertyRequirement.Required | PropertyRequirement.RequiredNullable | PropertyRequirement.OptionalLegacy =>
@@ -318,12 +318,6 @@ object CirceProtocolGenerator {
             }
           }
 
-          val pairs: List[Term.Tuple] = allFields.collect {
-            case Right(pair) => pair
-          }
-          val optional = allFields.collect {
-            case Left(field) => field
-          }
           val simpleCase = q"Vector(..${pairs})"
           val arg = optional.foldLeft[Term](simpleCase) { (acc, field) =>
             q"$acc ++ $field"
