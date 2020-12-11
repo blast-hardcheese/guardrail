@@ -5,10 +5,20 @@ import cats.Monad
 import com.twilio.guardrail.StaticDefns
 import com.twilio.guardrail.languages.LA
 import com.twilio.guardrail.terms.CollectionsLibTerms
+import scala.collection.JavaConverters._
+import cats.implicits._
 
 abstract class EnumProtocolTerms[L <: LA, F[_]](implicit Cl: CollectionsLibTerms[L, F]) {
   def MonadF: Monad[F]
-  def extractEnum(swagger: Schema[_]): F[Either[String, List[String]]]
+  def extractEnum(swagger: Schema[_]) = {
+    val enumEntries: Option[List[String]] = swagger match {
+      case x: io.swagger.v3.oas.models.media.StringSchema =>
+        Option[java.util.List[String]](x.getEnum()).map(_.asScala.toList)
+      case x =>
+        Option[java.util.List[_]](x.getEnum()).map(_.asScala.toList.map(_.toString()))
+    }
+    MonadF.pure(Either.fromOption(enumEntries, "Model has no enumerations"))
+  }
   def renderMembers(clsName: String, elems: List[(String, L#TermName, L#TermSelect)]): F[Option[L#ObjectDefinition]]
   def encodeEnum(clsName: String): F[Option[L#Definition]]
   def decodeEnum(clsName: String): F[Option[L#Definition]]
@@ -34,7 +44,7 @@ abstract class EnumProtocolTerms[L <: LA, F[_]](implicit Cl: CollectionsLibTerms
       newBuildAccessor: (String, String) => F[L#TermSelect] = buildAccessor _
   ) = new EnumProtocolTerms[L, F] {
     def MonadF                                                                                     = newMonadF
-    def extractEnum(swagger: Schema[_])                                                            = newExtractEnum(swagger)
+    override def extractEnum(swagger: Schema[_])                                                   = newExtractEnum(swagger)
     def renderMembers(clsName: String, elems: List[(String, L#TermName, L#TermSelect)])            = newRenderMembers(clsName, elems)
     def encodeEnum(clsName: String): F[Option[L#Definition]]                                       = newEncodeEnum(clsName)
     def decodeEnum(clsName: String): F[Option[L#Definition]]                                       = newDecodeEnum(clsName)

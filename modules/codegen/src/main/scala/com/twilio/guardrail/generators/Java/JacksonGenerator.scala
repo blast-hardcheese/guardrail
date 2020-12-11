@@ -141,15 +141,6 @@ object JacksonGenerator {
   def EnumProtocolTermInterp(implicit Cl: CollectionsLibTerms[JavaLanguage, Target]): EnumProtocolTerms[JavaLanguage, Target] = new EnumProtocolTermInterp
   class EnumProtocolTermInterp(implicit Cl: CollectionsLibTerms[JavaLanguage, Target]) extends EnumProtocolTerms[JavaLanguage, Target] {
     implicit def MonadF: Monad[Target] = Target.targetInstances
-    def extractEnum(swagger: Schema[_]) = {
-      val enumEntries: Option[List[String]] = swagger match {
-        case x: StringSchema =>
-          Option[java.util.List[String]](x.getEnum()).map(_.asScala.toList)
-        case x =>
-          Option[java.util.List[_]](x.getEnum()).map(_.asScala.toList.map(_.toString()))
-      }
-      Target.pure(Either.fromOption(enumEntries, "Model has no enumerations"))
-    }
 
     def renderMembers(
         clsName: String,

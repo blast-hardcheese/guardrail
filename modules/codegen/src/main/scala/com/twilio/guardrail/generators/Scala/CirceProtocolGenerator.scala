@@ -41,15 +41,6 @@ object CirceProtocolGenerator {
   def EnumProtocolTermInterp(implicit Cl: CollectionsLibTerms[ScalaLanguage, Target]): EnumProtocolTerms[ScalaLanguage, Target] = new EnumProtocolTermInterp
   class EnumProtocolTermInterp(implicit Cl: CollectionsLibTerms[ScalaLanguage, Target]) extends EnumProtocolTerms[ScalaLanguage, Target] {
     implicit def MonadF: Monad[Target] = Target.targetInstances
-    def extractEnum(swagger: Schema[_]) = {
-      val enumEntries: Option[List[String]] = swagger match {
-        case x: StringSchema =>
-          Option[java.util.List[String]](x.getEnum()).map(_.asScala.toList)
-        case x =>
-          Option[java.util.List[_]](x.getEnum()).map(_.asScala.toList.map(_.toString()))
-      }
-      Target.pure(Either.fromOption(enumEntries, "Model has no enumerations"))
-    }
 
     def renderMembers(clsName: String, elems: List[(String, scala.meta.Term.Name, scala.meta.Term.Select)]) =
       Target.pure(Some(q"""
