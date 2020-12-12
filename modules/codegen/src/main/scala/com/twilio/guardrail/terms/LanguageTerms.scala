@@ -99,14 +99,17 @@ abstract class LanguageTerms[L <: LA, F[_]] {
       packageObjectContents: List[L#Statement],
       extraTypes: List[L#Statement]
   ): F[Option[WriteTree]]
-  def writeProtocolDefinition(
+  def groupProtocolDefinitions(
+      elems: List[StrictProtocolElems[L]]
+  ): F[List[List[StrictProtocolElems[L]]]]
+  def writeProtocolDefinitions(
       outputPath: Path,
       pkgName: List[String],
       definitions: List[String],
       dtoComponents: List[String],
       imports: List[L#Import],
       protoImplicitName: Option[L#TermName],
-      elem: StrictProtocolElems[L]
+      elems: List[StrictProtocolElems[L]]
   ): F[(List[WriteTree], List[L#Statement])]
   def writeClient(
       pkgPath: Path,
@@ -189,15 +192,18 @@ abstract class LanguageTerms[L <: LA, F[_]] {
           List[L#Statement],
           List[L#Statement]
       ) => F[Option[WriteTree]] = writePackageObject _,
-      newWriteProtocolDefinition: (
+      newGroupProtocolDefinitions: (
+          List[StrictProtocolElems[L]]
+      ) => F[List[List[StrictProtocolElems[L]]]],
+      newWriteProtocolDefinitions: (
           Path,
           List[String],
           List[String],
           List[String],
           List[L#Import],
           Option[L#TermName],
-          StrictProtocolElems[L]
-      ) => F[(List[WriteTree], List[L#Statement])] = writeProtocolDefinition _,
+          List[StrictProtocolElems[L]]
+      ) => F[(List[WriteTree], List[L#Statement])] = writeProtocolDefinitions _,
       newWriteClient: (Path, List[String], List[L#Import], List[L#TermName], Option[List[String]], Client[L]) => F[List[WriteTree]] = writeClient _,
       newWriteServer: (Path, List[String], List[L#Import], List[L#TermName], Option[List[String]], Server[L]) => F[List[WriteTree]] = writeServer _,
       newWrapToObject: (L#TermName, List[L#Import], List[L#Definition]) => F[Option[L#ObjectDefinition]] = wrapToObject _
@@ -288,15 +294,18 @@ abstract class LanguageTerms[L <: LA, F[_]] {
         packageObjectContents,
         extraTypes
       )
-    def writeProtocolDefinition(
+    def groupProtocolDefinitions(
+        elems: List[StrictProtocolElems[L]]
+    ) = newGroupProtocolDefinitions(elems)
+    def writeProtocolDefinitions(
         outputPath: Path,
         pkgName: List[String],
         definitions: List[String],
         dtoComponents: List[String],
         imports: List[L#Import],
         protoImplicitName: Option[L#TermName],
-        elem: StrictProtocolElems[L]
-    ) = newWriteProtocolDefinition(outputPath, pkgName, definitions, dtoComponents, imports, protoImplicitName, elem)
+        elems: List[StrictProtocolElems[L]]
+    ) = newWriteProtocolDefinitions(outputPath, pkgName, definitions, dtoComponents, imports, protoImplicitName, elems)
     def writeClient(
         pkgPath: Path,
         pkgName: List[String],

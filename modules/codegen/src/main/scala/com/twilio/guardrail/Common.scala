@@ -142,8 +142,9 @@ object Common {
         .fromList(dtoComponents)
         .filter(_ => protocolElems.exists({ case _: RandomType[_] => false; case _ => true }))
 
-      protoOut <- protocolElems.traverse(
-        writeProtocolDefinition(outputPath, formattedPkgName, definitions, dtoComponents, customImports ++ protocolImports, protoImplicitName, _)
+      groupedElems <- groupProtocolDefinitions(protocolElems)
+      protoOut <- groupedElems.traverse(
+        writeProtocolDefinitions(outputPath, formattedPkgName, definitions, dtoComponents, customImports ++ protocolImports, protoImplicitName, _)
       )
       (protocolDefinitions, extraTypes) = protoOut.foldLeft((List.empty[WriteTree], List.empty[L#Statement]))(_ |+| _)
       packageObject <- writePackageObject(

@@ -304,60 +304,67 @@ object JavaGenerator {
       decl
     }
 
-    def writeProtocolDefinition(
+    // Just group each elem into its own file
+    def groupProtocolDefinitions(
+        elems: List[StrictProtocolElems[JavaLanguage]]
+    ) = Target.pure(elems.map(List(_)))
+
+    def writeProtocolDefinitions(
         outputPath: Path,
         pkgName: List[String],
         definitions: List[String],
         dtoComponents: List[String],
         imports: List[com.github.javaparser.ast.ImportDeclaration],
         protoImplicitName: Option[com.github.javaparser.ast.expr.Name],
-        elem: StrictProtocolElems[JavaLanguage]
+        elems: List[StrictProtocolElems[JavaLanguage]]
     ): Target[(List[WriteTree], List[com.github.javaparser.ast.Node])] =
       for {
         pkgDecl      <- buildPkgDecl(dtoComponents)
         showerImport <- safeParseRawImport((pkgName :+ "Shower").mkString("."))
-        nameAndCompilationUnit = elem match {
-          case EnumDefinition(_, _, _, _, cls, staticDefns) =>
-            val cu = new CompilationUnit()
-            cu.setPackageDeclaration(pkgDecl)
-            imports.foreach(cu.addImport)
-            staticDefns.extraImports.foreach(cu.addImport)
-            cu.addImport(showerImport)
-            val clsCopy = cls.clone()
-            staticDefns.definitions.foreach(clsCopy.addMember)
-            cu.addType(clsCopy)
-            Option((cls.getName.getIdentifier, cu))
-          case ClassDefinition(_, _, _, cls, staticDefns, _) =>
-            val cu = new CompilationUnit()
-            cu.setPackageDeclaration(pkgDecl)
-            imports.foreach(cu.addImport)
-            staticDefns.extraImports.foreach(cu.addImport)
-            val clsCopy = cls.clone()
-            staticDefns.definitions.map(staticifyInnerObjects).foreach(clsCopy.addMember)
-            cu.addImport(showerImport)
-            cu.addType(clsCopy)
-            Option((cls.getName.getIdentifier, cu))
-          case ADT(name, tpe, _, trt, staticDefns) =>
-            val cu = new CompilationUnit()
-            cu.setPackageDeclaration(pkgDecl)
-            imports.foreach(cu.addImport)
-            staticDefns.extraImports.foreach(cu.addImport)
-            val trtCopy = trt.clone()
-            staticDefns.definitions.map(staticifyInnerObjects).foreach(trtCopy.addMember)
-            cu.addImport(showerImport)
-            cu.addType(trtCopy)
-            Option((name, cu))
-          case RandomType(_, _) =>
-            Option.empty
+        res <- elems.traverse { elem =>
+          val nameAndCompilationUnit = elem match {
+            case EnumDefinition(_, _, _, _, cls, staticDefns) =>
+              val cu = new CompilationUnit()
+              cu.setPackageDeclaration(pkgDecl)
+              imports.foreach(cu.addImport)
+              staticDefns.extraImports.foreach(cu.addImport)
+              cu.addImport(showerImport)
+              val clsCopy = cls.clone()
+              staticDefns.definitions.foreach(clsCopy.addMember)
+              cu.addType(clsCopy)
+              Option((cls.getName.getIdentifier, cu))
+            case ClassDefinition(_, _, _, cls, staticDefns, _) =>
+              val cu = new CompilationUnit()
+              cu.setPackageDeclaration(pkgDecl)
+              imports.foreach(cu.addImport)
+              staticDefns.extraImports.foreach(cu.addImport)
+              val clsCopy = cls.clone()
+              staticDefns.definitions.map(staticifyInnerObjects).foreach(clsCopy.addMember)
+              cu.addImport(showerImport)
+              cu.addType(clsCopy)
+              Option((cls.getName.getIdentifier, cu))
+            case ADT(name, tpe, _, trt, staticDefns) =>
+              val cu = new CompilationUnit()
+              cu.setPackageDeclaration(pkgDecl)
+              imports.foreach(cu.addImport)
+              staticDefns.extraImports.foreach(cu.addImport)
+              val trtCopy = trt.clone()
+              staticDefns.definitions.map(staticifyInnerObjects).foreach(trtCopy.addMember)
+              cu.addImport(showerImport)
+              cu.addType(trtCopy)
+              Option((name, cu))
+            case RandomType(_, _) =>
+              Option.empty
+          }
+          nameAndCompilationUnit.traverse({
+            case (name, cu) =>
+              prettyPrintSource(cu).map(bytes => (name, bytes))
+          }).map(_.fold((List.empty[WriteTree], List.empty[Statement]))({
+            case (name, bytes) =>
+              (List(WriteTree(resolveFile(outputPath)(dtoComponents).resolve(s"$name.java"), bytes)), List.empty[Statement])
+          }))
         }
-        nameAndBytes <- nameAndCompilationUnit.fold(Target.pure(Option.empty[(String, Future[Array[Byte]])]))({
-          case (name, cu) =>
-            prettyPrintSource(cu).map(bytes => Option((name, bytes)))
-        })
-      } yield nameAndBytes.fold((List.empty[WriteTree], List.empty[Statement]))({
-        case (name, bytes) =>
-          (List(WriteTree(resolveFile(outputPath)(dtoComponents).resolve(s"$name.java"), bytes)), List.empty[Statement])
-      })
+      } yield res.unzip.bimap(_.flatten, _.flatten) // FIXME: This is because rendering a single element turned into a list of grouped elements
     def writeClient(
         pkgPath: Path,
         pkgName: List[String],

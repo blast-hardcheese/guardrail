@@ -341,18 +341,23 @@ object ScalaGenerator {
       })
     }
 
-    def writeProtocolDefinition(
+    // Just group each elem into its own file
+    def groupProtocolDefinitions(
+        elems: List[StrictProtocolElems[ScalaLanguage]]
+    ) = Target.pure(elems.map(List(_)))
+
+    def writeProtocolDefinitions(
         outputPath: Path,
         pkgName: List[String],
         definitions: List[String],
         dtoComponents: List[String],
         imports: List[scala.meta.Import],
         protoImplicitName: Option[scala.meta.Term.Name],
-        elem: StrictProtocolElems[ScalaLanguage]
+        elems: List[StrictProtocolElems[ScalaLanguage]]
     ): Target[(List[WriteTree], List[scala.meta.Stat])] = {
       val implicitImports = (List("Implicits") ++ protoImplicitName.map(_.value))
         .map(name => q"import ${buildPkgTerm(List("_root_") ++ pkgName ++ List(name))}._")
-      Target.pure(elem match {
+      Target.pure(elems.map({
         case EnumDefinition(_, _, _, _, cls, staticDefns) =>
           (
             List(
@@ -405,7 +410,7 @@ object ScalaGenerator {
           )
         case RandomType(_, _) =>
           (List.empty, List.empty)
-      })
+      }).unzip.bimap(_.flatten, _.flatten))
     }
 
     def writeClient(
