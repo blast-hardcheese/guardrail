@@ -33,7 +33,7 @@ abstract class ClientTerms[L <: LA, F[_]](implicit Cl: CollectionsLibTerms[L, F]
       serverUrls: Option[NonEmptyList[URI]],
       ctorArgs: List[List[L#MethodParameter]],
       tracing: Boolean
-  ): F[StaticDefns[L]]
+  ): F[Option[StaticDefns[L]]]
   def buildClient(
       clientName: String,
       tracingName: Option[String],
@@ -57,7 +57,7 @@ abstract class ClientTerms[L <: LA, F[_]](implicit Cl: CollectionsLibTerms[L, F]
       newClientClsArgs: (Option[String], Option[NonEmptyList[URI]], Boolean) => F[List[List[L#MethodParameter]]] = clientClsArgs _,
       newGenerateResponseDefinitions: (String, Responses[L], List[StrictProtocolElems[L]]) => F[List[L#Definition]] = generateResponseDefinitions _,
       newGenerateSupportDefinitions: (Boolean, Map[String, SecurityScheme[L]]) => F[List[SupportDefinition[L]]] = generateSupportDefinitions _,
-      newBuildStaticDefns: (String, Option[String], Option[NonEmptyList[URI]], List[List[L#MethodParameter]], Boolean) => F[StaticDefns[L]] =
+      newBuildStaticDefns: (String, Option[String], Option[NonEmptyList[URI]], List[List[L#MethodParameter]], Boolean) => F[Option[StaticDefns[L]]] =
         buildStaticDefns _,
       newBuildClient: (
           String,
@@ -97,7 +97,7 @@ abstract class ClientTerms[L <: LA, F[_]](implicit Cl: CollectionsLibTerms[L, F]
         serverUrls: Option[NonEmptyList[URI]],
         ctorArgs: List[List[L#MethodParameter]],
         tracing: Boolean
-    ): F[StaticDefns[L]] =
+    ): F[Option[StaticDefns[L]]] =
       newBuildStaticDefns(clientName, tracingName, serverUrls, ctorArgs, tracing)
     def buildClient(
         clientName: String,

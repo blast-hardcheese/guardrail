@@ -411,7 +411,7 @@ object Http4sClientGenerator {
         serverUrls: Option[NonEmptyList[URI]],
         ctorArgs: List[List[scala.meta.Term.Param]],
         tracing: Boolean
-    ): Target[StaticDefns[ScalaLanguage]] = {
+    ): Target[Option[StaticDefns[ScalaLanguage]]] = {
       def extraConstructors(
           tracingName: Option[String],
           serverUrls: Option[NonEmptyList[URI]],
@@ -452,10 +452,12 @@ object Http4sClientGenerator {
         q"""def apply[F[_]](...${ctorArgs}): ${Type.Apply(Type.Name(clientName), List(Type.Name("F")))} = ${ctorCall}""" +:
             extraConstructors(tracingName, serverUrls, Type.Name(clientName), ctorCall, tracing)
       Target.pure(
-        StaticDefns[ScalaLanguage](
-          className = clientName,
-          extraImports = List.empty,
-          definitions = decls
+        Option(
+          StaticDefns[ScalaLanguage](
+            className = clientName,
+            extraImports = List.empty,
+            definitions = decls
+          )
         )
       )
     }

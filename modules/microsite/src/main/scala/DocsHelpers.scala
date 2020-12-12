@@ -47,7 +47,7 @@ object DocsHelpers {
         )
         codegenDefinitions.clients match {
           case g :: Nil =>
-            val StaticDefns(className, extraImports, definitions) = g.staticDefns
+            val Some(StaticDefns(className, extraImports, definitions)) = g.staticDefns
             val o = q"object ${Term.Name(className)} { ..${definitions} }"
             val q"""class ${name}(...${args}) {
               ..${defns}

@@ -14,7 +14,7 @@ case class Client[L <: LA](
     pkg: List[String],
     clientName: String,
     imports: List[L#Import],
-    staticDefns: StaticDefns[L],
+    staticDefns: Option[StaticDefns[L]],
     client: NonEmptyList[Either[L#Trait, L#ClassDefinition]],
     responseDefinitions: List[L#Definition]
 )

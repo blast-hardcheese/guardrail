@@ -428,7 +428,7 @@ object ScalaGenerator {
               ..${dtoComponents.map(x => q"import ${buildPkgTerm(List("_root_") ++ x)}._")}
               ..$customImports;
               ..$imports;
-              ${companionForStaticDefns(staticDefns)};
+              ..${staticDefns.map(companionForStaticDefns).toList};
               ..${client.toList.map(_.merge)};
               ..$responseDefinitions
               """)

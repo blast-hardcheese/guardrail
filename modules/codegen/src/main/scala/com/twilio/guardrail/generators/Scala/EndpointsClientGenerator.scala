@@ -454,7 +454,7 @@ object EndpointsClientGenerator {
         serverUrls: Option[NonEmptyList[URI]],
         ctorArgs: List[List[scala.meta.Term.Param]],
         tracing: Boolean
-    ): Target[StaticDefns[ScalaLanguage]] = {
+    ): Target[Option[StaticDefns[ScalaLanguage]]] = {
       def paramsToArgs(params: List[List[Term.Param]]): List[List[Term]] =
         params
           .map({
@@ -474,7 +474,7 @@ object EndpointsClientGenerator {
         q"def apply(...${ctorArgs}): ${Type.Name(clientName)} = ${ctorCall}"
       )
 
-      Target.pure(StaticDefns[ScalaLanguage](clientName, List.empty, definitions))
+      Target.pure(Option(StaticDefns[ScalaLanguage](clientName, List.empty, definitions)))
     }
     def buildClient(
         clientName: String,

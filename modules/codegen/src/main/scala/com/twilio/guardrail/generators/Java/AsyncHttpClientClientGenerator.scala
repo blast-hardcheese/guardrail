@@ -981,12 +981,14 @@ object AsyncHttpClientClientGenerator {
         serverUrls: Option[NonEmptyList[URI]],
         ctorArgs: List[List[com.github.javaparser.ast.body.Parameter]],
         tracing: Boolean
-    ): Target[StaticDefns[JavaLanguage]] =
+    ): Target[Option[StaticDefns[JavaLanguage]]] =
       Target.pure(
-        StaticDefns[JavaLanguage](
-          className = clientName,
-          extraImports = List.empty,
-          definitions = List.empty
+        Option(
+          StaticDefns[JavaLanguage](
+            className = clientName,
+            extraImports = List.empty,
+            definitions = List.empty
+          )
         )
       )
 

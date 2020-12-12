@@ -35,7 +35,7 @@ object DropwizardClientGenerator {
         serverUrls: Option[NonEmptyList[URI]],
         ctorArgs: List[List[Term.Param]],
         tracing: Boolean
-    ): Target[StaticDefns[ScalaLanguage]] = Target.raiseError(RuntimeFailure("Dropwizard Scala clients are not yet supported"))
+    ): Target[Option[StaticDefns[ScalaLanguage]]] = Target.raiseError(RuntimeFailure("Dropwizard Scala clients are not yet supported"))
     override def generateClientOperation(
         className: List[String],
         responseClsName: String,
