@@ -57,7 +57,7 @@ class PythonLanguage extends LanguageAbstraction {
   type MethodDeclaration = python.Defn
 
   // Definitions
-  type Definition = String
+  type Definition = List[python.Stat]
   type AbstractClass = String
   type ClassDefinition = python.ClassDefn
   type InterfaceDefinition = String
@@ -69,7 +69,7 @@ class PythonLanguage extends LanguageAbstraction {
   type StaticMethod = String
 
   // Values
-  type ValueDefinition = String
+  type ValueDefinition = python.Stat
   type MethodParameter = python.Param
   type Type = python.Type
   type TypeName = python.Type

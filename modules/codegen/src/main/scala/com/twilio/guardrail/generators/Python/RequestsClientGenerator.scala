@@ -27,7 +27,7 @@ object RequestsClientGenerator {
     implicit def MonadF: Monad[Target] = Target.targetInstances
 
     def buildClient(clientName: String,tracingName: Option[String],serverUrls: Option[cats.data.NonEmptyList[java.net.URI]],basePath: Option[String],ctorArgs: List[List[PythonLanguage#MethodParameter]],clientCalls: List[PythonLanguage#Definition],supportDefinitions: List[PythonLanguage#Definition],tracing: Boolean): Target[cats.data.NonEmptyList[Either[PythonLanguage#Trait,PythonLanguage#ClassDefinition]]] = {
-      Target.pure(NonEmptyList.one(Right(python.ClassDefn(Nil, python.TermName(clientName), Nil))))
+      Target.pure(NonEmptyList.one(Right(python.ClassDefn(Nil, python.TermName(clientName), clientCalls.flatten))))
     }
     def buildStaticDefns(clientName: String,tracingName: Option[String],serverUrls: Option[cats.data.NonEmptyList[java.net.URI]],ctorArgs: List[List[PythonLanguage#MethodParameter]],tracing: Boolean): Target[Option[StaticDefns[PythonLanguage]]] = {
       Target.pure(None)
@@ -35,12 +35,20 @@ object RequestsClientGenerator {
     def clientClsArgs(tracingName: Option[String],serverUrls: Option[cats.data.NonEmptyList[java.net.URI]],tracing: Boolean): Target[List[List[PythonLanguage#MethodParameter]]] = {
       Target.pure(Nil)
     }
-    def generateClientOperation(className: List[String],responseClsName: String,tracing: Boolean,securitySchemes: Map[String,SecurityScheme[PythonLanguage]],parameters: LanguageParameters[PythonLanguage])(route: RouteMeta,methodName: String,responses: Responses[PythonLanguage]): Target[RenderedClientOperation[PythonLanguage]] = {
+    def generateClientOperation(className: List[String],responseClsName: String,tracing: Boolean,securitySchemes: Map[String,SecurityScheme[PythonLanguage]],parameters: LanguageParameters[PythonLanguage])(route: RouteMeta,methodName: String,responses: Responses[PythonLanguage]): Target[RenderedClientOperation[PythonLanguage]] =
       Target.pure(RenderedClientOperation[PythonLanguage](
-        s"$className: List[String], $responseClsName: String, $tracing: Boolean, $securitySchemes: Map[String,SecurityScheme[PythonLanguage]], $parameters: LanguageParameters[PythonLanguage]",
+        s"""def ${methodName}(...{arglists}) -> responseTypeRef:
+           |  # $className: List[String],
+           |  # $responseClsName: String,
+           |  # $tracing: Boolean,
+           |  # $securitySchemes: Map[String,SecurityScheme[PythonLanguage]],
+           |  # $parameters: LanguageParameters[PythonLanguage]",
+           |  return methodBody
+           |
+           |""".stripMargin.split("\n").toList.map(python.Stat),
         Nil
       ))
-    }
+
     def generateResponseDefinitions(responseClsName: String,responses: Responses[PythonLanguage],protocolElems: List[StrictProtocolElems[PythonLanguage]]): Target[List[PythonLanguage#Definition]] =
       Target.pure(Nil)
     def generateSupportDefinitions(tracing: Boolean,securitySchemes: Map[String,SecurityScheme[PythonLanguage]]): Target[List[SupportDefinition[PythonLanguage]]] = Target.pure(List.empty)

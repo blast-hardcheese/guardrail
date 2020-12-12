@@ -69,7 +69,7 @@ object DecoderProtocolGenerator {
         StaticDefns[PythonLanguage](
           className = clsName,
           extraImports = Nil,
-          definitions = List(encoder, decoder).flatten
+          definitions = List(List(encoder, decoder).flatten)
         )
       )
     def transformProperty(
