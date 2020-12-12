@@ -104,44 +104,47 @@ object PythonGenerator {
         elems: List[StrictProtocolElems[PythonLanguage]]
     ) = Target.pure(List(elems))
     def writeProtocolDefinitions(outputPath: java.nio.file.Path,pkgName: List[String],definitions: List[String],dtoComponents: List[String],imports: List[PythonLanguage#Import],protoImplicitName: Option[PythonLanguage#TermName],elems: List[StrictProtocolElems[PythonLanguage]]): Target[(List[WriteTree], List[PythonLanguage#Statement])] = {
-      Target.pure(elems.map({
-        case EnumDefinition(_, _, _, _, cls, staticDefns) =>
-          (
-            List(
-              WriteTree(
-                resolveFile(outputPath)(dtoComponents).resolve("__init__.py"),
-                Future.successful(
-                  s"""${imports.map(_.show).mkString("\n")}
-                     |
-                     |${cls.show}
-                     |""".stripMargin.getBytes(StandardCharsets.UTF_8))
+        Target.pure(
+          elems.traverse({
+            case EnumDefinition(_, _, _, _, cls, staticDefns) =>
+              (
+                List(
+                    Future.successful(
+                      s"""${imports.map(_.show).mkString("\n")}
+                         |
+                         |${cls.show}
+                         |""".stripMargin.getBytes(StandardCharsets.UTF_8)
+                    )
+                  ),
+                List.empty
               )
-            ),
-            List.empty
-          )
-        case ClassDefinition(_, _, _, cls, staticDefns, _) =>
-          (
-            List(
-              WriteTree(
-                resolveFile(outputPath)(dtoComponents).resolve(s"${cls.name.value}.py"),
-                Future.successful(
-                  s"""import ${dtoComponents.mkString(".")}
-                     |${imports.map(_.show).mkString("\n")}
-                     |
-                     |${cls.show}
-                     |""".stripMargin.getBytes(StandardCharsets.UTF_8))
+            case ClassDefinition(_, _, _, cls, staticDefns, _) =>
+              (
+                List(
+                  Future.successful(
+                    s"""${cls.show}
+                       |""".stripMargin.getBytes(StandardCharsets.UTF_8)
+                  )
+                ),
+                List.empty
               )
-            ),
-            List.empty
-          )
-        case ADT(name, tpe, _, trt, staticDefns) =>
-          (
-            List.empty,
-            List.empty
-          )
-        case RandomType(_, _) =>
-          (List.empty, List.empty)
-      }).unzip.bimap(_.flatten, _.flatten))
+            case ADT(name, tpe, _, trt, staticDefns) =>
+              (List.empty, List.empty)
+            case RandomType(_, _) =>
+              (List.empty, List.empty)
+          }).bimap({ fx =>
+            val importBytes =
+              s"""${imports.map(_.show).mkString("\n")}
+                 |
+                 |""".stripMargin.getBytes(StandardCharsets.UTF_8)
+            List(WriteTree(
+              resolveFile(outputPath)(dtoComponents).resolve("__init__.py"),
+                fx.sequence.map(_.flatMap(_.toList).toArray).map(importBytes ++ _)
+            ))
+          }, {
+            _.flatten
+          })
+        )
     }
     def writeServer(pkgPath: java.nio.file.Path,pkgName: List[String],customImports: List[PythonLanguage#Import],frameworkImplicitNames: List[PythonLanguage#TermName],dtoComponents: Option[List[String]],server: Server[PythonLanguage]): Target[List[WriteTree]] = Target.raiseUserError("Python requests server generation is not supported")
   }
