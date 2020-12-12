@@ -60,7 +60,7 @@ object DecoderProtocolGenerator {
     def renderDTOClass(clsName: String,supportPackage: List[String],terms: List[ProtocolParameter[PythonLanguage]],parents: List[SuperClass[PythonLanguage]]): Target[PythonLanguage#ClassDefinition] = {
       Target.pure(
         python.ClassDefn(List(python.TermName("dataclass")), python.TermName(clsName),
-          terms.map(param => python.Stat(s"${param.term.name.value}: ${param.term.tpe.value}"))
+          terms.map(param => python.Stat(s"${param.term.name.value}: '${param.term.tpe.value}'"))
         )
       )
     }
