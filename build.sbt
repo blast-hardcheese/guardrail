@@ -256,7 +256,7 @@ def ifScalaVersion[A](minorPred: Int => Boolean = _ => true)(value: List[A]): De
 }
 
 val commonSettings = Seq(
-  organization := "com.twilio",
+  organization := "dev.guardrail",
   licenses += ("MIT", url("http://opensource.org/licenses/MIT")),
 
   crossScalaVersions := Seq("2.12.12", "2.13.5"),
@@ -333,8 +333,8 @@ lazy val codegen = (project in file("modules/codegen"))
     homepage := Some(url("https://github.com/twilio/guardrail")),
     scmInfo := Some(
       ScmInfo(
-        url("https://github.com/twilio/guardrail"),
-        "scm:git@github.com:twilio/guardrail.git"
+        url("https://github.com/guardrail-dev/guardrail"),
+        "scm:git@github.com:guardrail-dev/guardrail.git"
       )
     ),
     developers := List(
